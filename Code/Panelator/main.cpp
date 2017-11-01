@@ -66,11 +66,11 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 
     //====== buttons and shit
     HWND hwndButton = CreateWindow("BUTTON",   /*a button and every other widget is called "window" but have different parameters*/
-                                   "OK",
+                                   "Add",
                                    WS_TABSTOP | WS_VISIBLE | WS_CHILD | BS_DEFPUSHBUTTON,
                                    10, /*x*/
                                    10, /*y*/
-                                   30, /*size x*/
+                                   50, /*size x*/
                                    30, /*size y*/
                                    hwnd,
                                    (HMENU)TEST_BUTTON,
@@ -78,11 +78,11 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
                                    NULL);
 
     HWND hwndButton2 = CreateWindow("BUTTON",
-                                   "BUT2",
+                                   "Insert",
                                    WS_TABSTOP | WS_VISIBLE | WS_CHILD | BS_DEFPUSHBUTTON,
+                                   70,
                                    10,
                                    50,
-                                   30,
                                    30,
                                    hwnd,
                                    (HMENU)TEST_BUTTON,
