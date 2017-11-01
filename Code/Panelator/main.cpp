@@ -99,7 +99,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
                                    30,
                                    hwnd,
                                    (HMENU)TEST_BUTTON,
-                                   (HINSTANCE)GetWindowLong(hwnd, GWL_HINSTANCE),
+                                   (HINSTANCE)GetWindowLongPtr(hwnd, GWLP_HINSTANCE),
                                    NULL);
 
     HWND hwndButton4 = CreateWindow("BUTTON",
