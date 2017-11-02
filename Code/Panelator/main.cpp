@@ -1,5 +1,6 @@
 #include <windows.h>
 #include <stdio.h>
+#include <CommCtrl.h>
 #include "resource.h"
 const char g_szClassName[] = "myWindowClass";
 
@@ -52,7 +53,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
     hwnd = CreateWindowEx(
         WS_EX_CLIENTEDGE,
         g_szClassName,
-        "The title of my window",  /*window name*/
+        "Panel Animator",  /*window name*/
         WS_OVERLAPPEDWINDOW,
         CW_USEDEFAULT, CW_USEDEFAULT, 500, 500, /*the size of the window*/
         NULL, NULL, hInstance, NULL);
@@ -89,9 +90,60 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
                                    (HINSTANCE)GetWindowLong(hwnd, GWL_HINSTANCE),
                                    NULL);
 
+    HWND hwndButton3 = CreateWindow("BUTTON",
+                                   "Delete",
+                                   WS_TABSTOP | WS_VISIBLE | WS_CHILD | BS_DEFPUSHBUTTON,
+                                   130,
+                                   10,
+                                   50,
+                                   30,
+                                   hwnd,
+                                   (HMENU)TEST_BUTTON,
+                                   (HINSTANCE)GetWindowLong(hwnd, GWL_HINSTANCE),
+                                   NULL);
+
+    HWND hwndButton4 = CreateWindow("BUTTON",
+                                   "Play",
+                                   WS_TABSTOP | WS_VISIBLE | WS_CHILD | BS_DEFPUSHBUTTON,
+                                   190,
+                                   10,
+                                   50,
+                                   30,
+                                   hwnd,
+                                   (HMENU)TEST_BUTTON,
+                                   (HINSTANCE)GetWindowLong(hwnd, GWL_HINSTANCE),
+                                   NULL);
+
+
+
+    HWND hWndComboBox = CreateWindow( WC_COMBOBOX,
+                                      TEXT("yay"),
+                                      CBS_DROPDOWN | CBS_HASSTRINGS | WS_CHILD | WS_OVERLAPPED | WS_VISIBLE,
+                                      320,
+                                      10,
+                                      70,
+                                      30,
+                                      hwnd,
+                                      NULL,
+                                      (HINSTANCE)GetWindowLong(hwnd, GWL_HINSTANCE),
+                                      NULL);
+
+    HWND hWndComboBox2 = CreateWindow( WC_COMBOBOX,
+                                      TEXT("yay"),
+                                      CBS_DROPDOWN | CBS_HASSTRINGS | WS_CHILD | WS_OVERLAPPED | WS_VISIBLE,
+                                      400,
+                                      10,
+                                      70,
+                                      30,
+                                      hwnd,
+                                      NULL,
+                                      (HINSTANCE)GetWindowLong(hwnd, GWL_HINSTANCE),
+                                      NULL);
 
     ShowWindow(hwnd, nCmdShow);  /*needs to be done to create a windows*/
     UpdateWindow(hwnd);          /*should be done everytime a "widget" is added*/
+
+    TextOut(GetDC(hwnd), 250, 15, "frame 1/1", 9);  /*IDK why, but the text only worked here */
 
     // Step 3: The Message Loop
     while(GetMessage(&Msg, NULL, 0, 0) > 0)
