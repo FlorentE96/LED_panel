@@ -1,14 +1,91 @@
 #include <windows.h>
 #include <stdio.h>
+#include <iostream>
 #include <string.h>
 #include <CommCtrl.h>
 #include "resource.h"
+
 const char g_szClassName[] = "myWindowClass";
 HINSTANCE hInst;
 HANDLE hComm;
 TCHAR com_port[] = "COMX";
-
+UINT panelLength = 5;
 DCB dcbSerialParams = { 0 }; // Initializing DCB structure
+
+int saveProjectFile(char * filename) {
+//    strcat(filename, ".")
+    HANDLE hFile = CreateFile((LPCTSTR) filename,
+                GENERIC_WRITE,
+                0,
+                NULL,
+                CREATE_ALWAYS,
+                FILE_ATTRIBUTE_NORMAL,
+                NULL
+    );
+    if (hComm == INVALID_HANDLE_VALUE)
+        return 0;
+    // TODO : write shit
+
+    CloseHandle(hFile);
+    return 1;
+}
+
+int loadProjectFile(char * filename) {
+    CreateFile((LPCTSTR) filename,
+                GENERIC_READ,
+                0,
+                NULL,
+                OPEN_EXISTING,
+                FILE_ATTRIBUTE_NORMAL,
+                NULL
+    );
+    if (hComm == INVALID_HANDLE_VALUE)
+        return 0;
+    // TODO : parse file
+    return 1;
+}
+
+BOOL CALLBACK DlgPanelConf(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
+{
+    switch(uMsg)
+    {
+    case WM_INITDIALOG:
+    {
+        SendMessage(GetDlgItem(hwndDlg, PANEL_LENGTH_SLIDER), TBM_SETRANGE,FALSE, MAKELONG(1, 10));
+        SendMessage(GetDlgItem(hwndDlg, PANEL_LENGTH_SLIDER), TBM_SETPOS,TRUE, panelLength);
+        SetDlgItemInt(hwndDlg, PANEL_LENGTH_TEXT, panelLength, FALSE);
+        return TRUE;
+    }
+    case WM_CLOSE:
+        EndDialog(hwndDlg, 0);
+        return TRUE;
+    case WM_HSCROLL:
+        panelLength = SendMessage(GetDlgItem(hwndDlg, PANEL_LENGTH_SLIDER), TBM_GETPOS, 0, 0);
+        SetDlgItemInt(hwndDlg, PANEL_LENGTH_TEXT, panelLength, FALSE);
+        return TRUE;
+    case WM_COMMAND:
+    {
+        switch(HIWORD(wParam))
+        {
+        case BN_CLICKED:
+            switch(LOWORD(wParam))
+            {
+            case IDOK_PORT:
+            {
+                EndDialog(hwndDlg,0);
+                break;
+            }
+            case IDCANCEL_PORT:
+                EndDialog(hwndDlg,0);
+                break;
+            }
+            break;
+        }
+    }
+    return TRUE;
+    }
+    return FALSE;
+}
 
 BOOL CALLBACK DlgSerialConf(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
@@ -128,12 +205,12 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
                 switch(LOWORD(wParam))
                 {
                     case MENU_CONF_SERIAL:
-                        DialogBox(hInst, MAKEINTRESOURCE(IDD_DIALOG1), NULL, (DLGPROC)DlgSerialConf);
+                        DialogBox(hInst, MAKEINTRESOURCE(IDD_DIALOG_SERIAL_CONF), NULL, (DLGPROC)DlgSerialConf);
                         break;
                     case MENU_SERIAL_CONNECT:
                     {
                         hComm = CreateFile((LPCSTR)com_port,          // for COM1—COM9 only
-                           GENERIC_READ | GENERIC_WRITE, //Read/Write
+                           GENERIC_READ | GENERIC_WRITE, // Read/Write
                            0,               // No Sharing
                            NULL,            // No Security
                            OPEN_EXISTING,   // Open existing port only
@@ -150,7 +227,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
                             switch (msgboxID)
                             {
                             case IDYES:
-                                DialogBox(hInst, MAKEINTRESOURCE(IDD_DIALOG1), NULL, (DLGPROC)DlgSerialConf);
+                                DialogBox(hInst, MAKEINTRESOURCE(IDD_DIALOG_SERIAL_CONF), NULL, (DLGPROC)DlgSerialConf);
                                 break;
                             case IDNO:
                                 break;
@@ -163,6 +240,83 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
                                 (LPCSTR)"Success",
                                 MB_ICONINFORMATION | MB_OK | MB_DEFBUTTON1
                             );
+                        break;
+                    }
+                    case MENU_CONF_PANEL:
+                        DialogBox(hInst, MAKEINTRESOURCE(IDD_DIALOG_PANEL_CONF), NULL, (DLGPROC)DlgPanelConf);
+                        break;
+                    case MENU_FILE_LOAD_PROJECT:
+                    {
+                        char filename[ MAX_PATH ];
+                        OPENFILENAME ofn;
+                          ZeroMemory( &filename, sizeof( filename ) );
+                          ZeroMemory( &ofn,      sizeof( ofn ) );
+                          ofn.lStructSize  = sizeof( ofn );
+                          ofn.lpstrDefExt = ".pmp";
+                          ofn.hwndOwner    = NULL;  // If you have a window to center over, put its HANDLE here
+                          ofn.lpstrFilter  = "PM Project Files\0*.pmp\0Any File\0*.*\0";
+                          ofn.lpstrFile    = filename;
+                          ofn.nMaxFile     = MAX_PATH;
+                          ofn.lpstrTitle   = "Select a File, yo!";
+                          ofn.Flags        = OFN_DONTADDTORECENT | OFN_FILEMUSTEXIST;
+
+                        if (GetOpenFileName( &ofn ))
+                        {
+                            if(!loadProjectFile(filename))
+                                MessageBox(
+                                    NULL,
+                                    (LPCSTR)"Impossible to open the file.\nPlease refer to the log file.",
+                                    (LPCSTR)"Problem",
+                                    MB_ICONWARNING | MB_OK | MB_DEFBUTTON1
+                                );
+                        }
+                        else
+                        {
+                            MessageBox(
+                                NULL,
+                                (LPCSTR)"Impossible to open the file.\nPlease refer to the log file.",
+                                (LPCSTR)"Problem",
+                                MB_ICONWARNING | MB_OK | MB_DEFBUTTON1
+                            );
+                            // TODO : write log
+                        }
+                        break;
+                    }
+                    case MENU_FILE_SAVE_PROJECT:
+                    {
+                        char filename[ MAX_PATH ];
+                        OPENFILENAME ofn;
+                          ZeroMemory( &filename, sizeof( filename ) );
+                          ZeroMemory( &ofn,      sizeof( ofn ) );
+                          ofn.lStructSize  = sizeof( ofn );
+                          ofn.hwndOwner    = NULL;  // If you have a window to center over, put its HANDLE here
+                          ofn.lpstrDefExt = ".pmp";
+                          ofn.lpstrFilter  = "PM Project Files\0*.pmp\0Any File\0*.*\0";
+                          ofn.lpstrFile    = filename;
+                          ofn.nMaxFile     = MAX_PATH;
+                          ofn.lpstrTitle   = "Select a File, yo!";
+                          ofn.Flags        = OFN_DONTADDTORECENT | OFN_PATHMUSTEXIST;
+
+                        if (GetSaveFileName( &ofn ))
+                        {
+                            if(!saveProjectFile(filename))
+                                MessageBox(
+                                    NULL,
+                                    (LPCSTR)"Impossible to save the file.\nPlease refer to the log file.",
+                                    (LPCSTR)"Problem",
+                                    MB_ICONWARNING | MB_OK | MB_DEFBUTTON1
+                                );
+                        }
+                        else
+                        {
+                            MessageBox(
+                                NULL,
+                                (LPCSTR)"Impossible to save the file.\nPlease refer to the log file.",
+                                (LPCSTR)"Problem",
+                                MB_ICONWARNING | MB_OK | MB_DEFBUTTON1
+                            );
+                            // TODO : write log
+                        }
                         break;
                     }
                 }
