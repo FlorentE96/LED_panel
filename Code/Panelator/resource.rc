@@ -18,11 +18,11 @@ IDR_MENU1 MENU
 {
     POPUP "File"
     {
-        MENUITEM "Dope", 0
+        MENUITEM "Open", 0
         MENUITEM SEPARATOR
-        MENUITEM "HUGE", 0
-        MENUITEM "AWESOME", 0
-        MENUITEM "Docaralho", 0
+        MENUITEM "Save", 0
+        MENUITEM "Save as", 0
+        MENUITEM "Close", 0
     }
 }
 
