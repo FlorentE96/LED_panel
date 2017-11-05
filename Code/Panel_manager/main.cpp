@@ -1,9 +1,14 @@
 #include <windows.h>
 #include <stdio.h>
+#include <string.h>
 #include <CommCtrl.h>
 #include "resource.h"
 const char g_szClassName[] = "myWindowClass";
 HINSTANCE hInst;
+HANDLE hComm;
+TCHAR com_port[] = "COMX";
+
+DCB dcbSerialParams = { 0 }; // Initializing DCB structure
 
 BOOL CALLBACK DlgMain(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
@@ -28,9 +33,17 @@ BOOL CALLBACK DlgMain(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
         SendMessage(GetDlgItem(hwndDlg, PAR_COMBO),(UINT) CB_ADDSTRING,(WPARAM) 0,(LPARAM) "Odd");
         SendMessage(GetDlgItem(hwndDlg, PAR_COMBO),(UINT) CB_ADDSTRING,(WPARAM) 0,(LPARAM) "Even");
 
-        SendMessage(GetDlgItem(hwndDlg, STOPBITS_COMBO),(UINT) CB_ADDSTRING,(WPARAM) 0,(LPARAM) "0");
         SendMessage(GetDlgItem(hwndDlg, STOPBITS_COMBO),(UINT) CB_ADDSTRING,(WPARAM) 0,(LPARAM) "1");
         SendMessage(GetDlgItem(hwndDlg, STOPBITS_COMBO),(UINT) CB_ADDSTRING,(WPARAM) 0,(LPARAM) "2");
+
+        SendMessage(GetDlgItem(hwndDlg, BYTESIZE_SPIN), (UINT) UDM_SETRANGE,
+            (WPARAM) 0, MAKELPARAM((WORD) 16, (WORD) 4));
+
+        SendMessage(GetDlgItem(hwndDlg, TIMEOUT_SPIN), (UINT) UDM_SETRANGE,
+            (WPARAM) 0, MAKELPARAM((WORD) 50, (WORD) 300));
+
+        SetDlgItemInt(hwndDlg, BYTE_SIZE_ENTRY,8,0);
+        SetDlgItemInt(hwndDlg, TIMEOUT_ENTRY,100,0);
         break;
     }
     return TRUE;
@@ -49,8 +62,39 @@ BOOL CALLBACK DlgMain(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
             switch(LOWORD(wParam))
             {
             case IDOK_PORT:
+            {
+
+                dcbSerialParams.DCBlength = sizeof(dcbSerialParams);
+                int ItemIndex = SendMessage(GetDlgItem(hwndDlg, COM_COMBO), (UINT) CB_GETCURSEL,
+                        (WPARAM) 0, (LPARAM) 0);
+                TCHAR  ListItem[256];
+                (TCHAR) SendMessage(GetDlgItem(hwndDlg, COM_COMBO), (UINT) CB_GETLBTEXT,
+                    (WPARAM) ItemIndex, (LPARAM) ListItem);
+                strcpy(com_port, ListItem);
+
+                ItemIndex = SendMessage(GetDlgItem(hwndDlg, BAUD_COMBO), (UINT) CB_GETCURSEL,
+                        (WPARAM) 0, (LPARAM) 0);
+                (TCHAR) SendMessage(GetDlgItem(hwndDlg, BAUD_COMBO), (UINT) CB_GETLBTEXT,
+                    (WPARAM) ItemIndex, (LPARAM) ListItem);
+                dcbSerialParams.BaudRate = atoi(ListItem);
+
+                ItemIndex = SendMessage(GetDlgItem(hwndDlg, PAR_COMBO), (UINT) CB_GETCURSEL,
+                        (WPARAM) 0, (LPARAM) 0);
+                dcbSerialParams.Parity   = ItemIndex;
+
+                ItemIndex = SendMessage(GetDlgItem(hwndDlg, STOPBITS_COMBO), (UINT) CB_GETCURSEL,
+                        (WPARAM) 0, (LPARAM) 0);
+                dcbSerialParams.StopBits = ItemIndex;
+
+                ItemIndex = SendMessage(GetDlgItem(hwndDlg, BYTESIZE_SPIN), (UINT) UDM_GETPOS,
+                        (WPARAM) 0, (LPARAM) 0);
+                dcbSerialParams.ByteSize  = ItemIndex;
+
+                ItemIndex = SendMessage(GetDlgItem(hwndDlg, TIMEOUT_SPIN), (UINT) UDM_GETPOS,
+                        (WPARAM) 0, (LPARAM) 0);
                 EndDialog(hwndDlg,0);
                 break;
+            }
             case IDCANCEL_PORT:
                 EndDialog(hwndDlg,0);
                 break;
@@ -82,6 +126,41 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
                     case MENU_CONF_SERIAL:
                         DialogBox(hInst, MAKEINTRESOURCE(IDD_DIALOG1), NULL, (DLGPROC)DlgMain);
                         break;
+                    case MENU_SERIAL_CONNECT:
+                    {
+                        hComm = CreateFile((LPCSTR)com_port,          // for COM1—COM9 only
+                           GENERIC_READ | GENERIC_WRITE, //Read/Write
+                           0,               // No Sharing
+                           NULL,            // No Security
+                           OPEN_EXISTING,   // Open existing port only
+                           0,               // Non Overlapped I/O
+                           NULL);
+                        if (hComm == INVALID_HANDLE_VALUE)
+                        {
+                            int msgboxID = MessageBox(
+                                NULL,
+                                (LPCSTR)"Impossible to open COM port\nDo you want to change the settings?",
+                                (LPCSTR)"Problem",
+                                MB_ICONWARNING | MB_YESNO | MB_DEFBUTTON2
+                            );
+                            switch (msgboxID)
+                            {
+                            case IDYES:
+                                DialogBox(hInst, MAKEINTRESOURCE(IDD_DIALOG1), NULL, (DLGPROC)DlgMain);
+                                break;
+                            case IDNO:
+                                break;
+                            }
+                        }
+                        else
+                            MessageBox(
+                                NULL,
+                                (LPCSTR)"COM Port successfully opened",
+                                (LPCSTR)"Success",
+                                MB_ICONINFORMATION | MB_OK | MB_DEFBUTTON1
+                            );
+                        break;
+                    }
                 }
             }
             else /* control commands */
