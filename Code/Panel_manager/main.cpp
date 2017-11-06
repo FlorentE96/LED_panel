@@ -2,11 +2,13 @@
 #include <stdio.h>
 #include <iostream>
 #include <string.h>
+#include "colors.h"
 #include <CommCtrl.h>
 #include "resource.h"
 
 const char g_szClassName[] = "myWindowClass";
 HINSTANCE hInst;
+HWND hwnd;
 HANDLE hComm;
 TCHAR com_port[] = "COMX";
 UINT panelLength = 5;
@@ -22,7 +24,7 @@ int saveProjectFile(char * filename) {
                 FILE_ATTRIBUTE_NORMAL,
                 NULL
     );
-    if (hComm == INVALID_HANDLE_VALUE)
+    if (hFile == INVALID_HANDLE_VALUE)
         return 0;
     // TODO : write shit
 
@@ -31,7 +33,7 @@ int saveProjectFile(char * filename) {
 }
 
 int loadProjectFile(char * filename) {
-    CreateFile((LPCTSTR) filename,
+    HANDLE hFile = CreateFile((LPCTSTR) filename,
                 GENERIC_READ,
                 0,
                 NULL,
@@ -39,10 +41,28 @@ int loadProjectFile(char * filename) {
                 FILE_ATTRIBUTE_NORMAL,
                 NULL
     );
-    if (hComm == INVALID_HANDLE_VALUE)
+    if (hFile == INVALID_HANDLE_VALUE)
         return 0;
     // TODO : parse file
     return 1;
+}
+
+void printCharacterOnPanel(HDC hDC, unsigned int panelIndex, int charOffsetX, int ledOffsetY) {
+    int panelX = 20 + charOffsetX*70 + 2;
+    int panelY = 20 + 110*panelIndex + ledOffsetY + 2;
+
+    RECT        LEDRect; //  = { 20, 20, panelLength*74+20, 102+20 }
+    HBRUSH myBrush = CreateSolidBrush(clrRed);
+
+    for(int ledY = 0; ledY < 7; ledY++) {
+        for(int ledX = 0; ledX < 5; ledX++) {
+            LEDRect = { panelX, panelY, panelX+10, panelY+10 };
+            FillRect(hDC,&LEDRect,myBrush);
+            panelX += 14;
+        }
+        panelY += 14;
+        panelX = 20 + charOffsetX*70 + 2;
+    }
 }
 
 BOOL CALLBACK DlgPanelConf(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
@@ -51,7 +71,7 @@ BOOL CALLBACK DlgPanelConf(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam
     {
     case WM_INITDIALOG:
     {
-        SendMessage(GetDlgItem(hwndDlg, PANEL_LENGTH_SLIDER), TBM_SETRANGE,FALSE, MAKELONG(1, 10));
+        SendMessage(GetDlgItem(hwndDlg, PANEL_LENGTH_SLIDER), TBM_SETRANGE,FALSE, MAKELONG(5, 10));
         SendMessage(GetDlgItem(hwndDlg, PANEL_LENGTH_SLIDER), TBM_SETPOS,TRUE, panelLength);
         SetDlgItemInt(hwndDlg, PANEL_LENGTH_TEXT, panelLength, FALSE);
         return TRUE;
@@ -60,8 +80,7 @@ BOOL CALLBACK DlgPanelConf(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam
         EndDialog(hwndDlg, 0);
         return TRUE;
     case WM_HSCROLL:
-        panelLength = SendMessage(GetDlgItem(hwndDlg, PANEL_LENGTH_SLIDER), TBM_GETPOS, 0, 0);
-        SetDlgItemInt(hwndDlg, PANEL_LENGTH_TEXT, panelLength, FALSE);
+        SetDlgItemInt(hwndDlg, PANEL_LENGTH_TEXT, SendMessage(GetDlgItem(hwndDlg, PANEL_LENGTH_SLIDER), TBM_GETPOS, 0, 0), FALSE);
         return TRUE;
     case WM_COMMAND:
     {
@@ -72,6 +91,9 @@ BOOL CALLBACK DlgPanelConf(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam
             {
             case IDOK_PORT:
             {
+                panelLength = SendMessage(GetDlgItem(hwndDlg, PANEL_LENGTH_SLIDER), TBM_GETPOS, 0, 0);
+                InvalidateRect(hwnd, NULL, TRUE);
+                UpdateWindow(hwnd);
                 EndDialog(hwndDlg,0);
                 break;
             }
@@ -190,7 +212,7 @@ BOOL CALLBACK DlgSerialConf(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lPara
 
 LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {
-   switch(msg)
+    switch(msg)
     {
         case WM_CLOSE:
             DestroyWindow(hwnd);
@@ -198,6 +220,37 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
         case WM_DESTROY:
             PostQuitMessage(0);
         break;
+
+        case WM_PAINT:
+        {
+            HDC         hDC;
+            PAINTSTRUCT ps;
+            RECT        panel1 = { 20, 20, panelLength*70+20, 98+20 };
+            RECT        panel2 = { 20, 130, panelLength*70+20, 98+130 };
+            RECT        panel3 = { 20, 240, panelLength*70+20, 98+240 };
+            RECT        panel4 = { 20, 350, panelLength*70+20, 98+350 };
+            HBRUSH myBrush = CreateSolidBrush(clrBlack);
+
+            hDC = BeginPaint(hwnd, &ps);
+
+            FillRect(hDC,&panel1,myBrush);
+            FillRect(hDC,&panel2,myBrush);
+            FillRect(hDC,&panel3,myBrush);
+            FillRect(hDC,&panel4,myBrush);
+
+            printCharacterOnPanel(hDC, 0,0,0);
+            printCharacterOnPanel(hDC, 0,1,0);
+            printCharacterOnPanel(hDC, 0,2,0);
+            printCharacterOnPanel(hDC, 0,3,0);
+            printCharacterOnPanel(hDC, 0,4,0);
+
+            printCharacterOnPanel(hDC, 1,0,0);
+            printCharacterOnPanel(hDC, 1,1,0);
+            printCharacterOnPanel(hDC, 2,2,0);
+            printCharacterOnPanel(hDC, 3,3,0);
+            EndPaint(hwnd, &ps);
+        }
+        return 0;
         case WM_COMMAND:
         {
             if(HIWORD(wParam) == 0 || HIWORD(wParam) == 1) /* Menu command */
@@ -344,7 +397,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
     LPSTR lpCmdLine, int nCmdShow)
 {
     WNDCLASSEX wc;
-    HWND hwnd;
     MSG Msg;
     hInst = hInstance;
 
