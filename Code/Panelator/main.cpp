@@ -1,9 +1,19 @@
 #include <windows.h>
 #include <stdio.h>
 #include <CommCtrl.h>
+#include <string.h>
+#include <iostream>
 #include "resource.h"
-const char g_szClassName[] = "myWindowClass";
 
+const char g_szClassName[] = "myWindowClass";
+HANDLE hComm;
+HINSTANCE hInst;
+TCHAR com_port[] = "COMX";
+DCB dcbSerialParams = { 0 }; // Initializing DCB (serial) structure
+
+BOOL CALLBACK DlgSerialConf(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam);
+void loadFileDlg();
+int loadProjectFile(char * filename);
 // Step 4: the Window Procedure
 LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {   /*this part of the code process the "events" since it's a event oriented language*/
@@ -15,8 +25,50 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
         case WM_DESTROY:
             PostQuitMessage(0);
         break;
+        case WM_COMMAND:{
+            if (HIWORD(wParam) == 1 || HIWORD(wParam) == 0){
+                switch(LOWORD(wParam)){
+                    case MENU_OPEN_BN:
+                        loadFileDlg();
+                        break;
+                    case MENU_CLOSE_BN:
+                        DestroyWindow(hwnd);
+                        break;
+                    case MENU_CONN_BN:
+                        DialogBox(hInst, MAKEINTRESOURCE(IDD_DIALOG_SERIAL_CONF), NULL, (DLGPROC)DlgSerialConf);
+
+                        break;
+                    case MENU_SEND_BN:
+
+                        break;
+                }
+            } else{
+                switch(HIWORD(wParam)){
+                    case BN_CLICKED:{
+                        switch(LOWORD(wParam)){
+                            case ADD_BN:
+                                printf("add");
+                                break;
+                            case DELETE_BN:
+                                printf("add");
+                                break;
+                            case INSERT_BN:
+                                printf("add");
+                                break;
+                            case PLAY_BN:
+                                printf("add");
+                                break;
+                        }
+                        break;
+                    }
+                }
+
+            }
+        break;
+        }
         default:
             return DefWindowProc(hwnd, msg, wParam, lParam);
+            break;
     }
     return 0;
 }
@@ -74,7 +126,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
                                    50, /*size x*/
                                    30, /*size y*/
                                    hwnd,
-                                   (HMENU)TEST_BUTTON,
+                                   (HMENU)ADD_BN,
                                    (HINSTANCE)GetWindowLong(hwnd, GWL_HINSTANCE),
                                    NULL);
 
@@ -86,7 +138,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
                                    50,
                                    30,
                                    hwnd,
-                                   (HMENU)TEST_BUTTON,
+                                   (HMENU)INSERT_BN,
                                    (HINSTANCE)GetWindowLong(hwnd, GWL_HINSTANCE),
                                    NULL);
 
@@ -98,7 +150,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
                                    50,
                                    30,
                                    hwnd,
-                                   (HMENU)TEST_BUTTON,
+                                   (HMENU)DELETE_BN,
                                    (HINSTANCE)GetWindowLongPtr(hwnd, GWLP_HINSTANCE),
                                    NULL);
 
@@ -110,7 +162,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
                                    50,
                                    30,
                                    hwnd,
-                                   (HMENU)TEST_BUTTON,
+                                   (HMENU)PLAY_BN,
                                    (HINSTANCE)GetWindowLong(hwnd, GWL_HINSTANCE),
                                    NULL);
 
@@ -152,4 +204,159 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
         DispatchMessage(&Msg);
     }
     return Msg.wParam;
+}
+
+BOOL CALLBACK DlgSerialConf(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
+{
+    switch(uMsg)
+    {
+    case WM_INITDIALOG:
+    {
+        SendMessage(GetDlgItem(hwndDlg, COM_COMBO),(UINT) CB_ADDSTRING,(WPARAM) 0,(LPARAM) "COM1");
+        SendMessage(GetDlgItem(hwndDlg, COM_COMBO),(UINT) CB_ADDSTRING,(WPARAM) 0,(LPARAM) "COM2");
+        SendMessage(GetDlgItem(hwndDlg, COM_COMBO),(UINT) CB_ADDSTRING,(WPARAM) 0,(LPARAM) "COM3");
+        SendMessage(GetDlgItem(hwndDlg, COM_COMBO),(UINT) CB_ADDSTRING,(WPARAM) 0,(LPARAM) "COM4");
+        SendMessage(GetDlgItem(hwndDlg, COM_COMBO),(UINT) CB_ADDSTRING,(WPARAM) 0,(LPARAM) "COM5");
+        SendMessage(GetDlgItem(hwndDlg, COM_COMBO), CB_SETCURSEL, (WPARAM)2, (LPARAM)0);
+
+        SendMessage(GetDlgItem(hwndDlg, BAUD_COMBO),(UINT) CB_ADDSTRING,(WPARAM) 0,(LPARAM) "4800");
+        SendMessage(GetDlgItem(hwndDlg, BAUD_COMBO),(UINT) CB_ADDSTRING,(WPARAM) 0,(LPARAM) "9600");
+        SendMessage(GetDlgItem(hwndDlg, BAUD_COMBO),(UINT) CB_ADDSTRING,(WPARAM) 0,(LPARAM) "19200");
+        SendMessage(GetDlgItem(hwndDlg, BAUD_COMBO),(UINT) CB_ADDSTRING,(WPARAM) 0,(LPARAM) "38400");
+        SendMessage(GetDlgItem(hwndDlg, BAUD_COMBO),(UINT) CB_ADDSTRING,(WPARAM) 0,(LPARAM) "57600");
+        SendMessage(GetDlgItem(hwndDlg, BAUD_COMBO),(UINT) CB_ADDSTRING,(WPARAM) 0,(LPARAM) "115200");
+        SendMessage(GetDlgItem(hwndDlg, BAUD_COMBO), CB_SETCURSEL, (WPARAM)1, (LPARAM)0);
+
+        SendMessage(GetDlgItem(hwndDlg, PAR_COMBO),(UINT) CB_ADDSTRING,(WPARAM) 0,(LPARAM) "No parity");
+        SendMessage(GetDlgItem(hwndDlg, PAR_COMBO),(UINT) CB_ADDSTRING,(WPARAM) 0,(LPARAM) "Odd");
+        SendMessage(GetDlgItem(hwndDlg, PAR_COMBO),(UINT) CB_ADDSTRING,(WPARAM) 0,(LPARAM) "Even");
+        SendMessage(GetDlgItem(hwndDlg, PAR_COMBO), CB_SETCURSEL, (WPARAM)1, (LPARAM)0);
+
+        SendMessage(GetDlgItem(hwndDlg, STOPBITS_COMBO),(UINT) CB_ADDSTRING,(WPARAM) 0,(LPARAM) "1");
+        SendMessage(GetDlgItem(hwndDlg, STOPBITS_COMBO),(UINT) CB_ADDSTRING,(WPARAM) 0,(LPARAM) "2");
+        SendMessage(GetDlgItem(hwndDlg, STOPBITS_COMBO), CB_SETCURSEL, (WPARAM)0, (LPARAM)0);
+
+        SendMessage(GetDlgItem(hwndDlg, BYTESIZE_SPIN), (UINT) UDM_SETRANGE,
+            (WPARAM) 0, MAKELPARAM((WORD) 16, (WORD) 4));
+
+        SendMessage(GetDlgItem(hwndDlg, TIMEOUT_SPIN), (UINT) UDM_SETRANGE,
+            (WPARAM) 0, MAKELPARAM((WORD) 50, (WORD) 300));
+
+        SetDlgItemInt(hwndDlg, BYTE_SIZE_ENTRY,8,0);
+        SetDlgItemInt(hwndDlg, TIMEOUT_ENTRY,100,0);
+        break;
+    }
+    return TRUE;
+
+    case WM_CLOSE:
+    {
+        EndDialog(hwndDlg, 0);
+    }
+    return TRUE;
+
+    case WM_COMMAND:
+    {
+        switch(HIWORD(wParam))
+        {
+        case BN_CLICKED:
+            switch(LOWORD(wParam))
+            {
+            case IDOK_PORT:
+            {
+
+                dcbSerialParams.DCBlength = sizeof(dcbSerialParams);
+                int ItemIndex = SendMessage(GetDlgItem(hwndDlg, COM_COMBO), (UINT) CB_GETCURSEL,
+                        (WPARAM) 0, (LPARAM) 0);
+                TCHAR  ListItem[256];
+                (TCHAR) SendMessage(GetDlgItem(hwndDlg, COM_COMBO), (UINT) CB_GETLBTEXT,
+                    (WPARAM) ItemIndex, (LPARAM) ListItem);
+                strcpy(com_port, ListItem);
+
+                ItemIndex = SendMessage(GetDlgItem(hwndDlg, BAUD_COMBO), (UINT) CB_GETCURSEL,
+                        (WPARAM) 0, (LPARAM) 0);
+                (TCHAR) SendMessage(GetDlgItem(hwndDlg, BAUD_COMBO), (UINT) CB_GETLBTEXT,
+                    (WPARAM) ItemIndex, (LPARAM) ListItem);
+                dcbSerialParams.BaudRate = atoi(ListItem);
+
+                ItemIndex = SendMessage(GetDlgItem(hwndDlg, PAR_COMBO), (UINT) CB_GETCURSEL,
+                        (WPARAM) 0, (LPARAM) 0);
+                dcbSerialParams.Parity   = ItemIndex;
+
+                ItemIndex = SendMessage(GetDlgItem(hwndDlg, STOPBITS_COMBO), (UINT) CB_GETCURSEL,
+                        (WPARAM) 0, (LPARAM) 0);
+                dcbSerialParams.StopBits = ItemIndex;
+
+                ItemIndex = SendMessage(GetDlgItem(hwndDlg, BYTESIZE_SPIN), (UINT) UDM_GETPOS,
+                        (WPARAM) 0, (LPARAM) 0);
+                dcbSerialParams.ByteSize  = ItemIndex;
+
+                ItemIndex = SendMessage(GetDlgItem(hwndDlg, TIMEOUT_SPIN), (UINT) UDM_GETPOS,
+                        (WPARAM) 0, (LPARAM) 0);
+                EndDialog(hwndDlg,0);
+                break;
+            }
+            case IDCANCEL_PORT:
+                EndDialog(hwndDlg,0);
+                break;
+            }
+            break;
+        }
+    }
+    return TRUE;
+    }
+    return FALSE;
+}
+
+
+int loadProjectFile(char * filename) {
+    HANDLE hFile = CreateFile((LPCTSTR) filename,
+                GENERIC_READ,
+                0   ,
+                NULL,
+                OPEN_EXISTING,
+                FILE_ATTRIBUTE_NORMAL,
+                NULL
+    );
+    if (hFile == INVALID_HANDLE_VALUE)
+        return 0;
+    // TODO : parse file
+    return 1;
+}
+
+void loadFileDlg(){
+    char filename[ MAX_PATH ];
+    OPENFILENAME ofn;
+      ZeroMemory( &filename, sizeof( filename ) );
+      ZeroMemory( &ofn,      sizeof( ofn ) );
+      ofn.lStructSize  = sizeof( ofn );
+      ofn.lpstrDefExt = ".pmp";
+      ofn.hwndOwner    = NULL;  // If you have a window to center over, put its HANDLE here
+      ofn.lpstrFilter  = "PM Project Files\0*.pmp\0Any File\0*.*\0";
+      ofn.lpstrFile    = filename;
+      ofn.nMaxFile     = MAX_PATH;
+      ofn.lpstrTitle   = "Select a File, yo!";
+      ofn.Flags        = OFN_DONTADDTORECENT | OFN_FILEMUSTEXIST;
+
+    if (GetOpenFileName( &ofn ))
+    {
+        if(!loadProjectFile(filename))
+            MessageBox(
+                NULL,
+                (LPCSTR)"Impossible to open the file.\nPlease refer to the log file.",
+                (LPCSTR)"Problem",
+                MB_ICONWARNING | MB_OK | MB_DEFBUTTON1
+            );
+    }
+    else
+    {
+        MessageBox(
+            NULL,
+            (LPCSTR)"Impossible to open the file.\nPlease refer to the log file.",
+            (LPCSTR)"Problem",
+            MB_ICONWARNING | MB_OK | MB_DEFBUTTON1
+        );
+        // TODO : write log
+    }
+
+
 }
