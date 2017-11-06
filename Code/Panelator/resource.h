@@ -14,11 +14,11 @@
 
 //menu defs
 
-#define MENU_OPEN_BN                            30000
-#define MENU_SAVE_BN                            30001
 #define MENU_CLOSE_BN                           30002
 #define MENU_CONN_BN                            30003
 #define MENU_SEND_BN                            30004
+#define MENU_CONF_PANEL                         30005
+#define MENU_START_BN                           30006
 
 //serial conf window
 
@@ -36,3 +36,7 @@
 #define BYTESIZE_SPIN                           40008
 #define TIMEOUT_SPIN                            40009
 
+//panel conf
+#define IDD_DIALOG_PANEL_CONF                   101
+#define PANEL_LENGTH_SLIDER                     40010
+#define PANEL_LENGTH_TEXT                       40011

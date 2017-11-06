@@ -4,17 +4,23 @@
 #include <string.h>
 #include <iostream>
 #include "resource.h"
-
+#include "colors.h"
+//vars
 const char g_szClassName[] = "myWindowClass";
 HANDLE hComm;
 HINSTANCE hInst;
 TCHAR com_port[] = "COMX";
 DCB dcbSerialParams = { 0 }; // Initializing DCB (serial) structure
+HWND hwnd;
+int panelLength = 5;
 
+//functions
+BOOL CALLBACK DlgPanelConf(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam);
 BOOL CALLBACK DlgSerialConf(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam);
 void loadFileDlg();
-int loadProjectFile(char * filename);
-// Step 4: the Window Procedure
+void printCharacterOnPanel(HDC hDC, unsigned int panelIndex, int charOffsetX, int ledOffsetY);
+int openSerial(void);
+
 LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {   /*this part of the code process the "events" since it's a event oriented language*/
     switch(msg)
@@ -25,21 +31,41 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
         case WM_DESTROY:
             PostQuitMessage(0);
         break;
+        case WM_PAINT:
+        {
+            HDC         hDC;
+            PAINTSTRUCT ps;
+            RECT        panel1 = { 10, 20+30, panelLength*70+10, 98+20+30 };
+
+            HBRUSH myBrush = CreateSolidBrush(clrBlack);
+
+            hDC = BeginPaint(hwnd, &ps);
+
+            FillRect(hDC,&panel1,myBrush);
+
+            printCharacterOnPanel(hDC, 0,0,0);
+            printCharacterOnPanel(hDC, 0,1,0);
+            printCharacterOnPanel(hDC, 0,2,0);
+            printCharacterOnPanel(hDC, 0,3,0);
+            printCharacterOnPanel(hDC, 0,4,0);
+
+            EndPaint(hwnd, &ps);
+        }
         case WM_COMMAND:{
             if (HIWORD(wParam) == 1 || HIWORD(wParam) == 0){
                 switch(LOWORD(wParam)){
-                    case MENU_OPEN_BN:
-                        loadFileDlg();
-                        break;
                     case MENU_CLOSE_BN:
                         DestroyWindow(hwnd);
                         break;
                     case MENU_CONN_BN:
                         DialogBox(hInst, MAKEINTRESOURCE(IDD_DIALOG_SERIAL_CONF), NULL, (DLGPROC)DlgSerialConf);
-
                         break;
-                    case MENU_SEND_BN:
-
+                    case MENU_START_BN:
+                        openSerial();
+                        printf("reading...");
+                        break;
+                    case MENU_CONF_PANEL:
+                        DialogBox(hInst, MAKEINTRESOURCE(IDD_DIALOG_PANEL_CONF), NULL, (DLGPROC)DlgPanelConf);
                         break;
                 }
             } else{
@@ -62,7 +88,6 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
                         break;
                     }
                 }
-
             }
         break;
         }
@@ -107,7 +132,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
         g_szClassName,
         "Panel Animator",  /*window name*/
         WS_OVERLAPPEDWINDOW,
-        CW_USEDEFAULT, CW_USEDEFAULT, 500, 500, /*the size of the window*/
+        CW_USEDEFAULT, CW_USEDEFAULT, 600, 300, /*the size of the window*/
         NULL, NULL, hInstance, NULL);
 
     if(hwnd == NULL)
@@ -307,56 +332,83 @@ BOOL CALLBACK DlgSerialConf(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lPara
     return FALSE;
 }
 
+BOOL CALLBACK DlgPanelConf(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
+{
+    switch(uMsg)
+    {
+    case WM_INITDIALOG:
+    {
+        SendMessage(GetDlgItem(hwndDlg, PANEL_LENGTH_SLIDER), TBM_SETRANGE,FALSE, MAKELONG(5, 10));
+        SendMessage(GetDlgItem(hwndDlg, PANEL_LENGTH_SLIDER), TBM_SETPOS,TRUE, panelLength);
+        SetDlgItemInt(hwndDlg, PANEL_LENGTH_TEXT, panelLength, FALSE);
+        return TRUE;
+    }
+    case WM_CLOSE:
+        EndDialog(hwndDlg, 0);
+        return TRUE;
+    case WM_HSCROLL:
+        SetDlgItemInt(hwndDlg, PANEL_LENGTH_TEXT, SendMessage(GetDlgItem(hwndDlg, PANEL_LENGTH_SLIDER), TBM_GETPOS, 0, 0), FALSE);
+        return TRUE;
+    case WM_COMMAND:
+    {
+        switch(HIWORD(wParam))
+        {
+        case BN_CLICKED:
+            switch(LOWORD(wParam))
+            {
+            case IDOK_PORT:
+            {
+                panelLength = SendMessage(GetDlgItem(hwndDlg, PANEL_LENGTH_SLIDER), TBM_GETPOS, 0, 0);
+                InvalidateRect(hwnd, NULL, TRUE);
+                UpdateWindow(hwnd);
+                EndDialog(hwndDlg,0);
+                break;
+            }
+            case IDCANCEL_PORT:
+                EndDialog(hwndDlg,0);
+                break;
+            }
+            break;
+        }
+    }
+    return TRUE;
+    }
+    return FALSE;
+}
 
-int loadProjectFile(char * filename) {
-    HANDLE hFile = CreateFile((LPCTSTR) filename,
-                GENERIC_READ,
-                0   ,
-                NULL,
-                OPEN_EXISTING,
-                FILE_ATTRIBUTE_NORMAL,
-                NULL
-    );
-    if (hFile == INVALID_HANDLE_VALUE)
+int openSerial(void) {
+     hComm = CreateFile(com_port,          // for COM1—COM9 only
+                        GENERIC_READ,    // Read only
+                        0,               // No Sharing
+                        NULL,            // No Security
+                        OPEN_EXISTING,   // Open existing port only
+                        0,               // Non Overlapped I/O
+                        NULL);
+
+    if (hComm == INVALID_HANDLE_VALUE)
         return 0;
     // TODO : parse file
     return 1;
 }
 
-void loadFileDlg(){
-    char filename[ MAX_PATH ];
-    OPENFILENAME ofn;
-      ZeroMemory( &filename, sizeof( filename ) );
-      ZeroMemory( &ofn,      sizeof( ofn ) );
-      ofn.lStructSize  = sizeof( ofn );
-      ofn.lpstrDefExt = ".pmp";
-      ofn.hwndOwner    = NULL;  // If you have a window to center over, put its HANDLE here
-      ofn.lpstrFilter  = "PM Project Files\0*.pmp\0Any File\0*.*\0";
-      ofn.lpstrFile    = filename;
-      ofn.nMaxFile     = MAX_PATH;
-      ofn.lpstrTitle   = "Select a File, yo!";
-      ofn.Flags        = OFN_DONTADDTORECENT | OFN_FILEMUSTEXIST;
+void printCharacterOnPanel(HDC hDC, unsigned int panelIndex, int charOffsetX, int ledOffsetY) {
+    int panelX = 10 + charOffsetX*70 + 2;
+    int panelY = 50 + 110*panelIndex + ledOffsetY + 2;
 
-    if (GetOpenFileName( &ofn ))
-    {
-        if(!loadProjectFile(filename))
-            MessageBox(
-                NULL,
-                (LPCSTR)"Impossible to open the file.\nPlease refer to the log file.",
-                (LPCSTR)"Problem",
-                MB_ICONWARNING | MB_OK | MB_DEFBUTTON1
-            );
+    RECT        LEDRect;
+    HBRUSH myBrush = CreateSolidBrush(clrRed);
+    char test[35] = {1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1,1,1,1,1};
+    int pos = 0;
+    for(int ledY = 0; ledY < 7; ledY++) {
+        for(int ledX = 0; ledX < 5; ledX++) {
+            LEDRect = { panelX, panelY, panelX+10, panelY+10 };
+            if (test[pos] == 1){
+            FillRect(hDC,&LEDRect,myBrush);
+            }
+            pos++;
+            panelX += 14;
+        }
+        panelY += 14;
+        panelX = 10 + charOffsetX*70 + 2;
     }
-    else
-    {
-        MessageBox(
-            NULL,
-            (LPCSTR)"Impossible to open the file.\nPlease refer to the log file.",
-            (LPCSTR)"Problem",
-            MB_ICONWARNING | MB_OK | MB_DEFBUTTON1
-        );
-        // TODO : write log
-    }
-
-
 }
