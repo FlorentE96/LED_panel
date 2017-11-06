@@ -47,6 +47,33 @@ int loadProjectFile(char * filename) {
     return 1;
 }
 
+int readCharacterBitmap(HANDLE hFile, char charID, BOOL charBMP[7][5]) {
+    SetFilePointer(hFile, 0, NULL, FILE_BEGIN);
+    DWORD nBytesRead=0;
+    BOOL bResult = FALSE;
+    char charRead = 0;
+    do{
+        bResult = ReadFile(hFile, &charRead, 1, &nBytesRead, NULL);
+    } while(charRead != charID && bResult &&  nBytesRead == 0);
+    SetFilePointer(hFile, 3, NULL, FILE_CURRENT); // got to next line
+
+    for(int iLine=0; iLine<7; iLine++)
+    {
+        for(int iCol=0; iCol<5; iCol++)
+        {
+            ReadFile(hFile, &charRead, 1, &nBytesRead, NULL);
+            if(charRead=='0')
+                charBMP[iCol][iLine] = FALSE;
+            else if (charRead=='1')
+                charBMP[iLine][iCol] = TRUE;
+
+        }
+        SetFilePointer(hFile, 2, NULL, FILE_CURRENT); // got to next line
+    }
+
+    return 1;
+}
+
 void printCharacterOnPanel(HDC hDC, unsigned int panelIndex, int charOffsetX, int ledOffsetY) {
     int panelX = 20 + charOffsetX*70 + 2;
     int panelY = 20 + 110*panelIndex + ledOffsetY + 2;
@@ -370,6 +397,23 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
                             );
                             // TODO : write log
                         }
+                        break;
+                    }
+                    case MENU_SERIAL_SEND:
+                    {
+                        HANDLE hFile = CreateFile((LPCTSTR) "char_set.pcs",
+                                    GENERIC_READ,
+                                    0,
+                                    NULL,
+                                    OPEN_EXISTING,
+                                    FILE_ATTRIBUTE_NORMAL,
+                                    NULL
+                        );
+                        if (hFile == INVALID_HANDLE_VALUE)
+                            return 0;
+                        BOOL myBMP[7][5] = {{0,},};
+                        readCharacterBitmap(hFile, '*', myBMP);
+                        CloseHandle(hFile);
                         break;
                     }
                 }
