@@ -21,6 +21,7 @@ BOOL CALLBACK DlgPanelConf(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam
 BOOL CALLBACK DlgSerialConf(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam);
 void printCharacterOnPanel(HDC hDC, unsigned int panelIndex, int charOffsetX, int ledOffsetY);
 int openSerial(void);
+void storeRXmsg(bool bank, bool isRed,bool isGreen);
 
 LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {   /*this part of the code process the "events" since it's a event oriented language*/
@@ -242,6 +243,25 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
                    SerialBuffer[i] = TempChar;// Store Tempchar into buffer
                    i++;
                 }while (NoBytesRead > 0);
+
+            if (SerialBuffer(0)==M){        /*check if is a message*/
+                switch (SerialBuffer(1)){   /*check from which bank it should be*/
+                    case r:
+                        break;
+                    case R:
+                        break;
+                    case g:
+                        break;
+                    case G:
+                        break;
+
+                }
+            storeRXmsg();
+            }
+            if (SerialBuffer(0)==B){        /*check if is a bank change*/
+
+
+            }
         }
 
         TranslateMessage(&Msg);
@@ -393,6 +413,18 @@ BOOL CALLBACK DlgPanelConf(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam
     return TRUE;
     }
     return FALSE;
+}
+
+void storeRXmsg(bool bank, bool isRed,bool isGreen){
+/*
+    bank = 0 -> bank 0
+    bank = 1 -> bank 1
+*/
+
+
+
+
+
 }
 
 int openSerial(void) {
