@@ -15,13 +15,16 @@ HWND hwnd;
 int panelLength = 8;
 DWORD dwEventMask;
 bool Status;
+char SerialBuffer[256];//Buffer for storing Rxed Data
+char REDbank[2][56];
+char GREENbank[2][56];
 
 //functions
 BOOL CALLBACK DlgPanelConf(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam);
 BOOL CALLBACK DlgSerialConf(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam);
 void printCharacterOnPanel(HDC hDC, unsigned int panelIndex, int charOffsetX, int ledOffsetY);
 int openSerial(void);
-void storeRXmsg(bool bank, bool LEDcolor, char msgSize);
+void storeRXmsg(int bank, bool LEDcolor, char msgSize);
 
 LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {   /*this part of the code process the "events" since it's a event oriented language*/
@@ -230,7 +233,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
         if(WaitCommEvent(hComm, &dwEventMask, NULL)){
             printf("receiving data");
             char TempChar; //Temporary character used for reading
-            char SerialBuffer[256];//Buffer for storing Rxed Data
             DWORD NoBytesRead;
             int i = 0;
                 do{
@@ -418,17 +420,24 @@ BOOL CALLBACK DlgPanelConf(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam
     return FALSE;
 }
 
-void storeRXmsg(bool bank, bool LEDcolor, char msgSize){
+void storeRXmsg(int bank, bool LEDcolor, char msgSize){
 /*
     bank = 0 -> bank 0
     bank = 1 -> bank 1
     LEDcolor = 1 -> red
     LEDcolor = 0 -> green
-    msgSize is a char containig the number of bits to read
+    msgSize is a char containing the number of bytes to be read
 */
-
-
-
+    if (LEDcolor==1){
+        for (int i=0;i=msgSize;i++){
+            REDbank[bank][i] = SerialBuffer[i+2];
+        }
+    }
+    else{
+        for (int i=0;i=msgSize;i++){
+            GREENbank[bank][i] = SerialBuffer[i+2];
+        }
+    }
 
 
 }
