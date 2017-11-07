@@ -12,7 +12,7 @@ HINSTANCE hInst;
 TCHAR com_port[] = "COMX";
 DCB dcbSerialParams = { 0 }; // Initializing DCB (serial) structure
 HWND hwnd;
-int panelLength = 5;
+int panelLength = 8;
 DWORD dwEventMask;
 bool Status;
 
@@ -21,7 +21,7 @@ BOOL CALLBACK DlgPanelConf(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam
 BOOL CALLBACK DlgSerialConf(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam);
 void printCharacterOnPanel(HDC hDC, unsigned int panelIndex, int charOffsetX, int ledOffsetY);
 int openSerial(void);
-void storeRXmsg(bool bank, bool isRed,bool isGreen);
+void storeRXmsg(bool bank, bool LEDcolor, char msgSize);
 
 LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {   /*this part of the code process the "events" since it's a event oriented language*/
@@ -134,7 +134,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
         g_szClassName,
         "Panel Animator",  /*window name*/
         WS_OVERLAPPEDWINDOW,
-        CW_USEDEFAULT, CW_USEDEFAULT, 600, 300, /*the size of the window*/
+        CW_USEDEFAULT, CW_USEDEFAULT, 600, 220, /*the size of the window*/
         NULL, NULL, hInstance, NULL);
 
     if(hwnd == NULL)
@@ -245,18 +245,21 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
                 }while (NoBytesRead > 0);
 
             if (SerialBuffer[0]== 'M'){        /*check if is a message*/
-                switch (SerialBuffer[1]){   /*check from which bank it should be*/
-                    case 'r':
+                switch (SerialBuffer[1]){      /*check from which bank it should be*/
+                    case 'r': /*bank 0, red*/
+                        storeRXmsg(0, 1, SerialBuffer[2]);
                         break;
-                    case 'R':
+                    case 'R': /*bank 1, red*/
+                        storeRXmsg(1, 1, SerialBuffer[2]);
                         break;
-                    case 'g':
+                    case 'g': /*bank 0, green*/
+                        storeRXmsg(0, 0, SerialBuffer[2]);
                         break;
-                    case 'G':
+                    case 'G': /*bank 1, green*/
+                        storeRXmsg(1, 0, SerialBuffer[2]);
                         break;
 
                 }
-            //storeRXmsg();
             }
             if (SerialBuffer[0]=='B'){        /*check if is a bank change*/
 
@@ -415,10 +418,13 @@ BOOL CALLBACK DlgPanelConf(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam
     return FALSE;
 }
 
-void storeRXmsg(bool bank, bool isRed,bool isGreen){
+void storeRXmsg(bool bank, bool LEDcolor, char msgSize){
 /*
     bank = 0 -> bank 0
     bank = 1 -> bank 1
+    LEDcolor = 1 -> red
+    LEDcolor = 0 -> green
+    msgSize is a char containig the number of bits to read
 */
 
 
