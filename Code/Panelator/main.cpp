@@ -244,21 +244,21 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
                    i++;
                 }while (NoBytesRead > 0);
 
-            if (SerialBuffer(0)==M){        /*check if is a message*/
-                switch (SerialBuffer(1)){   /*check from which bank it should be*/
-                    case r:
+            if (SerialBuffer[0]== 'M'){        /*check if is a message*/
+                switch (SerialBuffer[1]){   /*check from which bank it should be*/
+                    case 'r':
                         break;
-                    case R:
+                    case 'R':
                         break;
-                    case g:
+                    case 'g':
                         break;
-                    case G:
+                    case 'G':
                         break;
 
                 }
-            storeRXmsg();
+            //storeRXmsg();
             }
-            if (SerialBuffer(0)==B){        /*check if is a bank change*/
+            if (SerialBuffer[0]=='B'){        /*check if is a bank change*/
 
 
             }
