@@ -6,11 +6,22 @@
 #include <CommCtrl.h>
 #include "resource.h"
 
+#define PANEL_OFFSET_LEFT (120)
+#define PANEL_OFFSET_TOP  (20)
+#define CHAR_WIDTH        (70)
+#define PANEL_HEIGHT      (98)
+#define MAX_PANEL_LENGTH  (10)
+#define MIN_PANEL_LENGTH  (5)
+
 const char g_szClassName[] = "myWindowClass";
 HINSTANCE hInst;
 HWND hwnd;
 HANDLE hComm;
 TCHAR com_port[] = "COMX";
+COLORREF bg_color[4] = {clrYellow, clrRed, clrBlack, clrGreen};
+COLORREF fg_color[4] = {clrRed, clrBlack, clrYellow, clrOrange};
+COLORREF colorsList[5] = {clrRed, clrBlack, clrYellow, clrOrange, clrGreen};
+char panelText[4][MAX_PANEL_LENGTH+1] = {0,};
 UINT panelLength = 5;
 DCB dcbSerialParams = { 0 }; // Initializing DCB structure
 
@@ -54,8 +65,8 @@ int readCharacterBitmap(HANDLE hFile, char charID, BOOL charBMP[7][5]) {
     char charRead = 0;
     do{
         bResult = ReadFile(hFile, &charRead, 1, &nBytesRead, NULL);
-    } while(charRead != charID && bResult &&  nBytesRead == 0);
-    SetFilePointer(hFile, 3, NULL, FILE_CURRENT); // got to next line
+    } while(charRead != charID && !(bResult = TRUE && nBytesRead == 0)); // NOTE : if the character doesn't exist, nothing will be displayed
+    SetFilePointer(hFile, 2, NULL, FILE_CURRENT); // got to next line
 
     for(int iLine=0; iLine<7; iLine++)
     {
@@ -63,7 +74,7 @@ int readCharacterBitmap(HANDLE hFile, char charID, BOOL charBMP[7][5]) {
         {
             ReadFile(hFile, &charRead, 1, &nBytesRead, NULL);
             if(charRead=='0')
-                charBMP[iCol][iLine] = FALSE;
+                charBMP[iLine][iCol] = FALSE;
             else if (charRead=='1')
                 charBMP[iLine][iCol] = TRUE;
 
@@ -74,22 +85,106 @@ int readCharacterBitmap(HANDLE hFile, char charID, BOOL charBMP[7][5]) {
     return 1;
 }
 
-void printCharacterOnPanel(HDC hDC, unsigned int panelIndex, int charOffsetX, int ledOffsetY) {
-    int panelX = 20 + charOffsetX*70 + 2;
-    int panelY = 20 + 110*panelIndex + ledOffsetY + 2;
+void printCharacterOnPanel(HDC hDC, unsigned int panelIndex, int charOffsetX, int ledOffsetY, char characterID) {
+    int panelX = PANEL_OFFSET_LEFT + charOffsetX*70 + 2;
+    int panelY = PANEL_OFFSET_TOP + 110*panelIndex + ledOffsetY + 2;
 
     RECT        LEDRect; //  = { 20, 20, panelLength*74+20, 102+20 }
-    HBRUSH myBrush = CreateSolidBrush(clrRed);
+    HBRUSH bgBrush = CreateSolidBrush(bg_color[panelIndex]);
+    HBRUSH fgBrush = CreateSolidBrush(fg_color[panelIndex]);
+
+    HANDLE hFile = CreateFile((LPCTSTR) "char_set.pcs",
+                GENERIC_READ,
+                0,
+                NULL,
+                OPEN_EXISTING,
+                FILE_ATTRIBUTE_NORMAL,
+                NULL
+    );
+
+    BOOL myBMP[7][5] = {{0,},};
+    readCharacterBitmap(hFile, characterID, myBMP);
+    CloseHandle(hFile);
 
     for(int ledY = 0; ledY < 7; ledY++) {
         for(int ledX = 0; ledX < 5; ledX++) {
-            LEDRect = { panelX, panelY, panelX+10, panelY+10 };
-            FillRect(hDC,&LEDRect,myBrush);
-            panelX += 14;
+                LEDRect = { panelX, panelY, panelX+10, panelY+10 };
+                if(myBMP[ledY][ledX])
+                    FillRect(hDC,&LEDRect,fgBrush);
+                else
+                    FillRect(hDC,&LEDRect,bgBrush);
+                panelX += 14;
         }
         panelY += 14;
-        panelX = 20 + charOffsetX*70 + 2;
+        panelX = PANEL_OFFSET_LEFT + charOffsetX*70 + 2;
     }
+}
+
+BOOL CALLBACK DlgPanelSettings(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
+{
+    static WORD panel;
+    switch(uMsg)
+    {
+    case WM_INITDIALOG:
+    {
+        panel = HIWORD(lParam);
+        SendMessage(GetDlgItem(hwndDlg, FG_COLOR_COMBO),(UINT) CB_ADDSTRING,(WPARAM) 0,(LPARAM) "Red");
+        SendMessage(GetDlgItem(hwndDlg, FG_COLOR_COMBO),(UINT) CB_ADDSTRING,(WPARAM) 0,(LPARAM) "Black");
+        SendMessage(GetDlgItem(hwndDlg, FG_COLOR_COMBO),(UINT) CB_ADDSTRING,(WPARAM) 0,(LPARAM) "Yellow");
+        SendMessage(GetDlgItem(hwndDlg, FG_COLOR_COMBO),(UINT) CB_ADDSTRING,(WPARAM) 0,(LPARAM) "Orange");
+        SendMessage(GetDlgItem(hwndDlg, FG_COLOR_COMBO),(UINT) CB_ADDSTRING,(WPARAM) 0,(LPARAM) "Green");
+        SendMessage(GetDlgItem(hwndDlg, FG_COLOR_COMBO), CB_SETCURSEL, (WPARAM)2, (LPARAM)0);
+
+        SendMessage(GetDlgItem(hwndDlg, BG_COLOR_COMBO),(UINT) CB_ADDSTRING,(WPARAM) 0,(LPARAM) "Red");
+        SendMessage(GetDlgItem(hwndDlg, BG_COLOR_COMBO),(UINT) CB_ADDSTRING,(WPARAM) 0,(LPARAM) "Black");
+        SendMessage(GetDlgItem(hwndDlg, BG_COLOR_COMBO),(UINT) CB_ADDSTRING,(WPARAM) 0,(LPARAM) "Yellow");
+        SendMessage(GetDlgItem(hwndDlg, BG_COLOR_COMBO),(UINT) CB_ADDSTRING,(WPARAM) 0,(LPARAM) "Orange");
+        SendMessage(GetDlgItem(hwndDlg, BG_COLOR_COMBO),(UINT) CB_ADDSTRING,(WPARAM) 0,(LPARAM) "Green");
+        SendMessage(GetDlgItem(hwndDlg, BG_COLOR_COMBO), CB_SETCURSEL, (WPARAM)2, (LPARAM)0);
+
+        SendMessage(GetDlgItem(hwndDlg, PANEL_TEXT_EDIT),(UINT) EM_SETLIMITTEXT,(WPARAM) panelLength,(LPARAM) 0);
+
+        // TODO : try to preselect the previous color
+
+        return TRUE;
+    }
+    case WM_CLOSE:
+        EndDialog(hwndDlg, 0);
+        return TRUE;
+    case WM_COMMAND:
+    {
+        switch(HIWORD(wParam))
+        {
+        case BN_CLICKED:
+            switch(LOWORD(wParam))
+            {
+                case IDOK_PANEL_SET:
+                {
+                    int ItemIndex = SendMessage(GetDlgItem(hwndDlg, BG_COLOR_COMBO), (UINT) CB_GETCURSEL,
+                        (WPARAM) 0, (LPARAM) 0);
+                    bg_color[panel] = colorsList[ItemIndex];
+
+                    ItemIndex = SendMessage(GetDlgItem(hwndDlg, FG_COLOR_COMBO), (UINT) CB_GETCURSEL,
+                        (WPARAM) 0, (LPARAM) 0);
+                    fg_color[panel] = colorsList[ItemIndex];
+
+                    SendMessage(GetDlgItem(hwndDlg, PANEL_TEXT_EDIT), WM_GETTEXT, (WPARAM)MAX_PANEL_LENGTH+1, (LPARAM)panelText[panel]);
+
+                    InvalidateRect(hwnd, NULL, TRUE);
+                    UpdateWindow(hwnd);
+                    EndDialog(hwndDlg,0);
+                    break;
+                }
+                case IDCANCEL_PANEL_SET:
+                    EndDialog(hwndDlg,0);
+                    break;
+            }
+            break;
+        }
+    }
+    return TRUE;
+    }
+    return FALSE;
 }
 
 BOOL CALLBACK DlgPanelConf(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
@@ -98,7 +193,7 @@ BOOL CALLBACK DlgPanelConf(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam
     {
     case WM_INITDIALOG:
     {
-        SendMessage(GetDlgItem(hwndDlg, PANEL_LENGTH_SLIDER), TBM_SETRANGE,FALSE, MAKELONG(5, 10));
+        SendMessage(GetDlgItem(hwndDlg, PANEL_LENGTH_SLIDER), TBM_SETRANGE,FALSE, MAKELONG(MIN_PANEL_LENGTH, MAX_PANEL_LENGTH));
         SendMessage(GetDlgItem(hwndDlg, PANEL_LENGTH_SLIDER), TBM_SETPOS,TRUE, panelLength);
         SetDlgItemInt(hwndDlg, PANEL_LENGTH_TEXT, panelLength, FALSE);
         return TRUE;
@@ -193,7 +288,6 @@ BOOL CALLBACK DlgSerialConf(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lPara
             {
             case IDOK_PORT:
             {
-
                 dcbSerialParams.DCBlength = sizeof(dcbSerialParams);
                 int ItemIndex = SendMessage(GetDlgItem(hwndDlg, COM_COMBO), (UINT) CB_GETCURSEL,
                         (WPARAM) 0, (LPARAM) 0);
@@ -252,10 +346,10 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
         {
             HDC         hDC;
             PAINTSTRUCT ps;
-            RECT        panel1 = { 20, 20, panelLength*70+20, 98+20 };
-            RECT        panel2 = { 20, 130, panelLength*70+20, 98+130 };
-            RECT        panel3 = { 20, 240, panelLength*70+20, 98+240 };
-            RECT        panel4 = { 20, 350, panelLength*70+20, 98+350 };
+            RECT        panel1 = { PANEL_OFFSET_LEFT, PANEL_OFFSET_TOP, panelLength*CHAR_WIDTH+PANEL_OFFSET_LEFT, PANEL_HEIGHT+PANEL_OFFSET_TOP };
+            RECT        panel2 = { PANEL_OFFSET_LEFT, 130, panelLength*CHAR_WIDTH+PANEL_OFFSET_LEFT, PANEL_HEIGHT+130 };
+            RECT        panel3 = { PANEL_OFFSET_LEFT, 240, panelLength*CHAR_WIDTH+PANEL_OFFSET_LEFT, PANEL_HEIGHT+240 };
+            RECT        panel4 = { PANEL_OFFSET_LEFT, 350, panelLength*CHAR_WIDTH+PANEL_OFFSET_LEFT, PANEL_HEIGHT+350 };
             HBRUSH myBrush = CreateSolidBrush(clrBlack);
 
             hDC = BeginPaint(hwnd, &ps);
@@ -265,22 +359,24 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
             FillRect(hDC,&panel3,myBrush);
             FillRect(hDC,&panel4,myBrush);
 
-            printCharacterOnPanel(hDC, 0,0,0);
-            printCharacterOnPanel(hDC, 0,1,0);
-            printCharacterOnPanel(hDC, 0,2,0);
-            printCharacterOnPanel(hDC, 0,3,0);
-            printCharacterOnPanel(hDC, 0,4,0);
+            for(int iPanel = 0; iPanel < 4; iPanel++)
+            {
+                int iChar=0;
+                char myChar;
+                while(panelText[iPanel][iChar] != '\0' && iChar < MAX_PANEL_LENGTH+1)
+                {
+                    myChar = panelText[iPanel][iChar];
+                    printCharacterOnPanel(hDC, iPanel,iChar,0, myChar);
+                    iChar++;
+                }
+            }
 
-            printCharacterOnPanel(hDC, 1,0,0);
-            printCharacterOnPanel(hDC, 1,1,0);
-            printCharacterOnPanel(hDC, 2,2,0);
-            printCharacterOnPanel(hDC, 3,3,0);
             EndPaint(hwnd, &ps);
         }
         return 0;
         case WM_COMMAND:
         {
-            if(HIWORD(wParam) == 0 || HIWORD(wParam) == 1) /* Menu command */
+            if(lParam == 0) /* Menu command */
             {
                 switch(LOWORD(wParam))
                 {
@@ -399,23 +495,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
                         }
                         break;
                     }
-                    case MENU_SERIAL_SEND:
-                    {
-                        HANDLE hFile = CreateFile((LPCTSTR) "char_set.pcs",
-                                    GENERIC_READ,
-                                    0,
-                                    NULL,
-                                    OPEN_EXISTING,
-                                    FILE_ATTRIBUTE_NORMAL,
-                                    NULL
-                        );
-                        if (hFile == INVALID_HANDLE_VALUE)
-                            return 0;
-                        BOOL myBMP[7][5] = {{0,},};
-                        readCharacterBitmap(hFile, '*', myBMP);
-                        CloseHandle(hFile);
-                        break;
-                    }
+
                 }
             }
             else /* control commands */
@@ -425,6 +505,26 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
                     case BN_CLICKED:
                         switch(LOWORD(wParam))
                         {
+                            case MAIN_CONF1_BUTTON:
+                                DialogBoxParam(hInst, MAKEINTRESOURCE(IDD_DIALOG_PANEL_SETTINGS),NULL,(DLGPROC)DlgPanelSettings,
+                                  MAKELPARAM((WORD)0,(WORD)0)
+                                );
+                                break;
+                            case MAIN_CONF2_BUTTON:
+                                DialogBoxParam(hInst, MAKEINTRESOURCE(IDD_DIALOG_PANEL_SETTINGS),NULL,(DLGPROC)DlgPanelSettings,
+                                  MAKELPARAM((WORD)0,(WORD)1)
+                                );
+                                break;
+                            case MAIN_CONF3_BUTTON:
+                                DialogBoxParam(hInst, MAKEINTRESOURCE(IDD_DIALOG_PANEL_SETTINGS),NULL,(DLGPROC)DlgPanelSettings,
+                                  MAKELPARAM((WORD)0,(WORD)2)
+                                );
+                                break;
+                            case MAIN_CONF4_BUTTON:
+                                DialogBoxParam(hInst, MAKEINTRESOURCE(IDD_DIALOG_PANEL_SETTINGS),NULL,(DLGPROC)DlgPanelSettings,
+                                  MAKELPARAM((WORD)0,(WORD)3)
+                                );
+                                break;
                         }
                         break;
                 }
@@ -469,7 +569,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
         g_szClassName,
         "Panel Manager",  /*window name*/
         WS_OVERLAPPEDWINDOW,
-        CW_USEDEFAULT, CW_USEDEFAULT, 500, 500, /*the size of the window*/
+        CW_USEDEFAULT, CW_USEDEFAULT, 1000, 600, /*the size of the window*/
         NULL, NULL, hInstance, NULL);
 
     if(hwnd == NULL)
@@ -479,21 +579,24 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
         return 0;
     }
 
-    //====== buttons and shit
-//    HWND hwndButton = CreateWindow("BUTTON",   /*a button and every other widget is called "window" but have different parameters*/
-//                                   "Add",
-//                                   WS_TABSTOP | WS_VISIBLE | WS_CHILD | BS_DEFPUSHBUTTON,
-//                                   10, /*x*/
-//                                   10, /*y*/
-//                                   50, /*size x*/
-//                                   30, /*size y*/
-//                                   hwnd,
-//                                   (HMENU)TEST_BUTTON,
-//                                   (HINSTANCE)GetWindowLong(hwnd, GWL_HINSTANCE),
-//                                   NULL);
-
+    CreateWindow("BUTTON","Configure",WS_TABSTOP | WS_VISIBLE | WS_CHILD | BS_DEFPUSHBUTTON,20,20,80,30,
+                                       hwnd,(HMENU)MAIN_CONF1_BUTTON,(HINSTANCE)GetWindowLong(hwnd, GWL_HINSTANCE),NULL);
+    CreateWindow("BUTTON","Configure",WS_TABSTOP | WS_VISIBLE | WS_CHILD | BS_DEFPUSHBUTTON,20,130,80,30,
+                                       hwnd,(HMENU)MAIN_CONF2_BUTTON,(HINSTANCE)GetWindowLong(hwnd, GWL_HINSTANCE),NULL);
+    CreateWindow("BUTTON","Configure",WS_TABSTOP | WS_VISIBLE | WS_CHILD | BS_DEFPUSHBUTTON,20,240,80,30,
+                                       hwnd,(HMENU)MAIN_CONF3_BUTTON,(HINSTANCE)GetWindowLong(hwnd, GWL_HINSTANCE),NULL);
+    CreateWindow("BUTTON","Configure",WS_TABSTOP | WS_VISIBLE | WS_CHILD | BS_DEFPUSHBUTTON,20,350,80,30,
+                                       hwnd,(HMENU)MAIN_CONF4_BUTTON,(HINSTANCE)GetWindowLong(hwnd, GWL_HINSTANCE),NULL);
+    CreateWindow("BUTTON","Send",WS_TABSTOP | WS_VISIBLE | WS_CHILD | BS_DEFPUSHBUTTON,20,60,80,30,
+                                       hwnd,(HMENU)MAIN_SEND1_BUTTON,(HINSTANCE)GetWindowLong(hwnd, GWL_HINSTANCE),NULL);
+    CreateWindow("BUTTON","Send",WS_TABSTOP | WS_VISIBLE | WS_CHILD | BS_DEFPUSHBUTTON,20,170,80,30,
+                                       hwnd,(HMENU)MAIN_SEND2_BUTTON,(HINSTANCE)GetWindowLong(hwnd, GWL_HINSTANCE),NULL);
+    CreateWindow("BUTTON","Send",WS_TABSTOP | WS_VISIBLE | WS_CHILD | BS_DEFPUSHBUTTON,20,280,80,30,
+                                       hwnd,(HMENU)MAIN_SEND3_BUTTON,(HINSTANCE)GetWindowLong(hwnd, GWL_HINSTANCE),NULL);
+    CreateWindow("BUTTON","Send",WS_TABSTOP | WS_VISIBLE | WS_CHILD | BS_DEFPUSHBUTTON,20,390,80,30,
+                                       hwnd,(HMENU)MAIN_SEND4_BUTTON,(HINSTANCE)GetWindowLong(hwnd, GWL_HINSTANCE),NULL);
     ShowWindow(hwnd, nCmdShow);  /*needs to be done to create a windows*/
-    UpdateWindow(hwnd);          /*should be done everytime a "widget" is added*/
+    UpdateWindow(hwnd);          /*should be done every time a "widget" is added*/
 
     // Step 3: The Message Loop
     while(GetMessage(&Msg, NULL, 0, 0) > 0)
