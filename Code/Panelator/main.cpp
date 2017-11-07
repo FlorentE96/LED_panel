@@ -13,11 +13,12 @@ TCHAR com_port[] = "COMX";
 DCB dcbSerialParams = { 0 }; // Initializing DCB (serial) structure
 HWND hwnd;
 int panelLength = 5;
+DWORD dwEventMask;
+bool Status;
 
 //functions
 BOOL CALLBACK DlgPanelConf(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam);
 BOOL CALLBACK DlgSerialConf(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam);
-void loadFileDlg();
 void printCharacterOnPanel(HDC hDC, unsigned int panelIndex, int charOffsetX, int ledOffsetY);
 int openSerial(void);
 
@@ -62,7 +63,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
                         break;
                     case MENU_START_BN:
                         openSerial();
-                        printf("reading...");
+                        SetCommMask(hComm, EV_RXCHAR);
                         break;
                     case MENU_CONF_PANEL:
                         DialogBox(hInst, MAKEINTRESOURCE(IDD_DIALOG_PANEL_CONF), NULL, (DLGPROC)DlgPanelConf);
@@ -225,6 +226,24 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
     // Step 3: The Message Loop
     while(GetMessage(&Msg, NULL, 0, 0) > 0)
     {   /*this part of the code is like a while loop that runs everytime*/
+        if(WaitCommEvent(hComm, &dwEventMask, NULL)){
+            printf("receiving data");
+            char TempChar; //Temporary character used for reading
+            char SerialBuffer[256];//Buffer for storing Rxed Data
+            DWORD NoBytesRead;
+            int i = 0;
+                do{
+                   ReadFile( hComm,           //Handle of the Serial port
+                             &TempChar,       //Temporary character
+                             sizeof(TempChar),//Size of TempChar
+                             &NoBytesRead,    //Number of bytes read
+                             NULL);
+
+                   SerialBuffer[i] = TempChar;// Store Tempchar into buffer
+                   i++;
+                }while (NoBytesRead > 0);
+        }
+
         TranslateMessage(&Msg);
         DispatchMessage(&Msg);
     }
@@ -385,9 +404,14 @@ int openSerial(void) {
                         0,               // Non Overlapped I/O
                         NULL);
 
-    if (hComm == INVALID_HANDLE_VALUE)
+    if (hComm == INVALID_HANDLE_VALUE){
+        MessageBox(hwnd,
+                        "Serial port could not be started!\nCheck your connection settings and try again.",
+                        "Serial fail",
+                        MB_OK);
         return 0;
-    // TODO : parse file
+    }
+    printf("connected");
     return 1;
 }
 
