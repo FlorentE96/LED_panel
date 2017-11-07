@@ -18,6 +18,7 @@ HINSTANCE hInst;
 HWND hwnd;
 HANDLE hComm;
 TCHAR com_port[] = "COMX";
+TCHAR characterSetFile[MAX_PATH] = "void";
 COLORREF bg_color[4] = {clrYellow, clrRed, clrBlack, clrGreen};
 COLORREF fg_color[4] = {clrRed, clrBlack, clrYellow, clrOrange};
 COLORREF colorsList[5] = {clrRed, clrBlack, clrYellow, clrOrange, clrGreen};
@@ -93,7 +94,7 @@ void printCharacterOnPanel(HDC hDC, unsigned int panelIndex, int charOffsetX, in
     HBRUSH bgBrush = CreateSolidBrush(bg_color[panelIndex]);
     HBRUSH fgBrush = CreateSolidBrush(fg_color[panelIndex]);
 
-    HANDLE hFile = CreateFile((LPCTSTR) "char_set.pcs",
+    HANDLE hFile = CreateFile((LPCTSTR) characterSetFile,
                 GENERIC_READ,
                 0,
                 NULL,
@@ -133,16 +134,18 @@ BOOL CALLBACK DlgPanelSettings(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lP
         SendMessage(GetDlgItem(hwndDlg, FG_COLOR_COMBO),(UINT) CB_ADDSTRING,(WPARAM) 0,(LPARAM) "Yellow");
         SendMessage(GetDlgItem(hwndDlg, FG_COLOR_COMBO),(UINT) CB_ADDSTRING,(WPARAM) 0,(LPARAM) "Orange");
         SendMessage(GetDlgItem(hwndDlg, FG_COLOR_COMBO),(UINT) CB_ADDSTRING,(WPARAM) 0,(LPARAM) "Green");
-        SendMessage(GetDlgItem(hwndDlg, FG_COLOR_COMBO), CB_SETCURSEL, (WPARAM)2, (LPARAM)0);
+        SendMessage(GetDlgItem(hwndDlg, FG_COLOR_COMBO), CB_SETCURSEL, (WPARAM)0, (LPARAM)0);
 
         SendMessage(GetDlgItem(hwndDlg, BG_COLOR_COMBO),(UINT) CB_ADDSTRING,(WPARAM) 0,(LPARAM) "Red");
         SendMessage(GetDlgItem(hwndDlg, BG_COLOR_COMBO),(UINT) CB_ADDSTRING,(WPARAM) 0,(LPARAM) "Black");
         SendMessage(GetDlgItem(hwndDlg, BG_COLOR_COMBO),(UINT) CB_ADDSTRING,(WPARAM) 0,(LPARAM) "Yellow");
         SendMessage(GetDlgItem(hwndDlg, BG_COLOR_COMBO),(UINT) CB_ADDSTRING,(WPARAM) 0,(LPARAM) "Orange");
         SendMessage(GetDlgItem(hwndDlg, BG_COLOR_COMBO),(UINT) CB_ADDSTRING,(WPARAM) 0,(LPARAM) "Green");
-        SendMessage(GetDlgItem(hwndDlg, BG_COLOR_COMBO), CB_SETCURSEL, (WPARAM)2, (LPARAM)0);
+        SendMessage(GetDlgItem(hwndDlg, BG_COLOR_COMBO), CB_SETCURSEL, (WPARAM)1, (LPARAM)0);
 
         SendMessage(GetDlgItem(hwndDlg, PANEL_TEXT_EDIT),(UINT) EM_SETLIMITTEXT,(WPARAM) panelLength,(LPARAM) 0);
+
+        SendMessage(GetDlgItem(hwndDlg, PANEL_TEXT_EDIT),(UINT) WM_SETTEXT, 0,(LPARAM) panelText[panel]);
 
         // TODO : try to preselect the previous color
 
@@ -160,6 +163,16 @@ BOOL CALLBACK DlgPanelSettings(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lP
             {
                 case IDOK_PANEL_SET:
                 {
+                    if(!strcmp(characterSetFile, "void"))
+                    {
+                        MessageBox(
+                            NULL,
+                            (LPCSTR)"Please load a character set first.",
+                            (LPCSTR)"Problem",
+                            MB_ICONWARNING | MB_OK | MB_DEFBUTTON1
+                        );
+                        EndDialog(hwndDlg,0);
+                    }
                     int ItemIndex = SendMessage(GetDlgItem(hwndDlg, BG_COLOR_COMBO), (UINT) CB_GETCURSEL,
                         (WPARAM) 0, (LPARAM) 0);
                     bg_color[panel] = colorsList[ItemIndex];
@@ -433,7 +446,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
                           ofn.lpstrFilter  = "PM Project Files\0*.pmp\0Any File\0*.*\0";
                           ofn.lpstrFile    = filename;
                           ofn.nMaxFile     = MAX_PATH;
-                          ofn.lpstrTitle   = "Select a File, yo!";
+                          ofn.lpstrTitle   = "Please select a file...";
                           ofn.Flags        = OFN_DONTADDTORECENT | OFN_FILEMUSTEXIST;
 
                         if (GetOpenFileName( &ofn ))
@@ -470,7 +483,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
                           ofn.lpstrFilter  = "PM Project Files\0*.pmp\0Any File\0*.*\0";
                           ofn.lpstrFile    = filename;
                           ofn.nMaxFile     = MAX_PATH;
-                          ofn.lpstrTitle   = "Select a File, yo!";
+                          ofn.lpstrTitle   = "Please select a file...";
                           ofn.Flags        = OFN_DONTADDTORECENT | OFN_PATHMUSTEXIST;
 
                         if (GetSaveFileName( &ofn ))
@@ -495,7 +508,37 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
                         }
                         break;
                     }
+                    case MENU_FILE_LOAD_CHAR_SET:
+                    {
+                        char filename[ MAX_PATH ];
+                        OPENFILENAME ofn;
+                          ZeroMemory( &filename, sizeof( filename ) );
+                          ZeroMemory( &ofn,      sizeof( ofn ) );
+                          ofn.lStructSize  = sizeof( ofn );
+                          ofn.lpstrDefExt = ".pcs";
+                          ofn.hwndOwner    = NULL;  // If you have a window to center over, put its HANDLE here
+                          ofn.lpstrFilter  = "Panel Character Sets\0*.pcs\0Any File\0*.*\0";
+                          ofn.lpstrFile    = filename;
+                          ofn.nMaxFile     = MAX_PATH;
+                          ofn.lpstrTitle   = "Please select a character set...";
+                          ofn.Flags        = OFN_DONTADDTORECENT | OFN_FILEMUSTEXIST;
 
+                        if (GetOpenFileName( &ofn ))
+                        {
+                            strcpy(characterSetFile, filename);
+                        }
+                        else
+                        {
+                            MessageBox(
+                                NULL,
+                                (LPCSTR)"Impossible to save the file.\nPlease refer to the log file.",
+                                (LPCSTR)"Problem",
+                                MB_ICONWARNING | MB_OK | MB_DEFBUTTON1
+                            );
+                            // TODO : write log
+                        }
+                        break;
+                    }
                 }
             }
             else /* control commands */
