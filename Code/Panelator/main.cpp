@@ -18,11 +18,12 @@ bool Status;
 char SerialBuffer[256];//Buffer for storing Rxed Data
 char REDbank[2][56];
 char GREENbank[2][56];
+bool character[35] = {1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1,1,1,1,1};
 
 //functions
 BOOL CALLBACK DlgPanelConf(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam);
 BOOL CALLBACK DlgSerialConf(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam);
-void printCharacterOnPanel(HDC hDC, unsigned int panelIndex, int charOffsetX, int ledOffsetY);
+void printCharacterOnPanel(HDC hDC, unsigned int panelIndex, int charOffsetX, int ledOffsetY, bool character[35]);
 int openSerial(void);
 void storeRXmsg(int bank, bool LEDcolor, char msgSize);
 
@@ -48,11 +49,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 
             FillRect(hDC,&panel1,myBrush);
 
-            printCharacterOnPanel(hDC, 0,0,0);
-            printCharacterOnPanel(hDC, 0,1,0);
-            printCharacterOnPanel(hDC, 0,2,0);
-            printCharacterOnPanel(hDC, 0,3,0);
-            printCharacterOnPanel(hDC, 0,4,0);
+            printCharacterOnPanel(hDC, 0, 0, 0, character);
 
             EndPaint(hwnd, &ps);
         }
@@ -462,18 +459,17 @@ int openSerial(void) {
     return 1;
 }
 
-void printCharacterOnPanel(HDC hDC, unsigned int panelIndex, int charOffsetX, int ledOffsetY) {
+void printCharacterOnPanel(HDC hDC, unsigned int panelIndex, int charOffsetX, int ledOffsetY, bool character[35]) {
     int panelX = 10 + charOffsetX*70 + 2;
     int panelY = 50 + 110*panelIndex + ledOffsetY + 2;
 
     RECT        LEDRect;
     HBRUSH myBrush = CreateSolidBrush(clrRed);
-    char test[35] = {1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1,1,1,1,1};
-    int pos = 0;
+    char pos = 0;
     for(int ledY = 0; ledY < 7; ledY++) {
         for(int ledX = 0; ledX < 5; ledX++) {
             LEDRect = { panelX, panelY, panelX+10, panelY+10 };
-            if (test[pos] == 1){
+            if (character[pos] == 1){
             FillRect(hDC,&LEDRect,myBrush);
             }
             pos++;
