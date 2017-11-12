@@ -27,10 +27,23 @@ typedef struct Panel {
     Effect effect;
 } Panel;
 Panel panels[4];
-COLORREF colorsList[5] = {clrRed, clrBlack, clrYellow, clrGreen};
+COLORREF colorsList[4] = {clrRed, clrBlack, clrYellow, clrGreen};
 char panelText[4][MAX_PANEL_LENGTH+1] = {0,};
 UINT panelLength = 5;
 DCB dcbSerialParams = { 0 }; // Initializing DCB structure
+
+
+inline COLORREF negativeMap(COLORREF color)
+{
+    if(color == clrRed)
+        return clrGreen;
+    if(color == clrGreen)
+        return clrRed;
+    if(color == clrBlack)
+        return clrYellow;
+    if(color == clrYellow)
+        return clrBlack;
+}
 
 int saveProjectFile(char * filename) {
     HANDLE hFile = CreateFile((LPCTSTR) filename,
@@ -202,6 +215,8 @@ BOOL CALLBACK DlgPanelSettings(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lP
                         else if(IsDlgButtonChecked(hwndDlg, FX_NEG_RAD) == BST_CHECKED)
                         {
                             panels[panel].effect = NEG;
+                            panels[panel].fg_color = negativeMap(panels[panel].fg_color);
+                            panels[panel].bg_color = negativeMap(panels[panel].bg_color);
                         }
                     }
 
