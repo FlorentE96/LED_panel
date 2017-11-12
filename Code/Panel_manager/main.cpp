@@ -19,15 +19,20 @@ HWND hwnd;
 HANDLE hComm;
 TCHAR com_port[] = "COMX";
 TCHAR characterSetFile[MAX_PATH] = "void";
-COLORREF bg_color[4] = {clrYellow, clrRed, clrBlack, clrGreen};
-COLORREF fg_color[4] = {clrRed, clrBlack, clrYellow, clrOrange};
-COLORREF colorsList[5] = {clrRed, clrBlack, clrYellow, clrOrange, clrGreen};
+typedef enum Efect {NONE, LR, RL, NEG} Effect;
+typedef struct Panel {
+    COLORREF bg_color;
+    COLORREF fg_color;
+    //UINT panelLength;
+    Effect effect;
+} Panel;
+Panel panels[4];
+COLORREF colorsList[5] = {clrRed, clrBlack, clrYellow, clrGreen};
 char panelText[4][MAX_PANEL_LENGTH+1] = {0,};
 UINT panelLength = 5;
 DCB dcbSerialParams = { 0 }; // Initializing DCB structure
 
 int saveProjectFile(char * filename) {
-//    strcat(filename, ".")
     HANDLE hFile = CreateFile((LPCTSTR) filename,
                 GENERIC_WRITE,
                 0,
@@ -91,8 +96,8 @@ void printCharacterOnPanel(HDC hDC, unsigned int panelIndex, int charOffsetX, in
     int panelY = PANEL_OFFSET_TOP + 110*panelIndex + ledOffsetY + 2;
 
     RECT        LEDRect; //  = { 20, 20, panelLength*74+20, 102+20 }
-    HBRUSH bgBrush = CreateSolidBrush(bg_color[panelIndex]);
-    HBRUSH fgBrush = CreateSolidBrush(fg_color[panelIndex]);
+    HBRUSH bgBrush = CreateSolidBrush(panels[panelIndex].bg_color);
+    HBRUSH fgBrush = CreateSolidBrush(panels[panelIndex].fg_color);
 
     HANDLE hFile = CreateFile((LPCTSTR) characterSetFile,
                 GENERIC_READ,
@@ -132,20 +137,21 @@ BOOL CALLBACK DlgPanelSettings(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lP
         SendMessage(GetDlgItem(hwndDlg, FG_COLOR_COMBO),(UINT) CB_ADDSTRING,(WPARAM) 0,(LPARAM) "Red");
         SendMessage(GetDlgItem(hwndDlg, FG_COLOR_COMBO),(UINT) CB_ADDSTRING,(WPARAM) 0,(LPARAM) "Black");
         SendMessage(GetDlgItem(hwndDlg, FG_COLOR_COMBO),(UINT) CB_ADDSTRING,(WPARAM) 0,(LPARAM) "Yellow");
-        SendMessage(GetDlgItem(hwndDlg, FG_COLOR_COMBO),(UINT) CB_ADDSTRING,(WPARAM) 0,(LPARAM) "Orange");
         SendMessage(GetDlgItem(hwndDlg, FG_COLOR_COMBO),(UINT) CB_ADDSTRING,(WPARAM) 0,(LPARAM) "Green");
         SendMessage(GetDlgItem(hwndDlg, FG_COLOR_COMBO), CB_SETCURSEL, (WPARAM)0, (LPARAM)0);
 
         SendMessage(GetDlgItem(hwndDlg, BG_COLOR_COMBO),(UINT) CB_ADDSTRING,(WPARAM) 0,(LPARAM) "Red");
         SendMessage(GetDlgItem(hwndDlg, BG_COLOR_COMBO),(UINT) CB_ADDSTRING,(WPARAM) 0,(LPARAM) "Black");
         SendMessage(GetDlgItem(hwndDlg, BG_COLOR_COMBO),(UINT) CB_ADDSTRING,(WPARAM) 0,(LPARAM) "Yellow");
-        SendMessage(GetDlgItem(hwndDlg, BG_COLOR_COMBO),(UINT) CB_ADDSTRING,(WPARAM) 0,(LPARAM) "Orange");
         SendMessage(GetDlgItem(hwndDlg, BG_COLOR_COMBO),(UINT) CB_ADDSTRING,(WPARAM) 0,(LPARAM) "Green");
         SendMessage(GetDlgItem(hwndDlg, BG_COLOR_COMBO), CB_SETCURSEL, (WPARAM)1, (LPARAM)0);
 
         SendMessage(GetDlgItem(hwndDlg, PANEL_TEXT_EDIT),(UINT) EM_SETLIMITTEXT,(WPARAM) panelLength,(LPARAM) 0);
 
         SendMessage(GetDlgItem(hwndDlg, PANEL_TEXT_EDIT),(UINT) WM_SETTEXT, 0,(LPARAM) panelText[panel]);
+
+        CheckRadioButton(hwndDlg, FX_NONE_RAD, FX_NEG_RAD, FX_NONE_RAD);
+
 
         // TODO : try to preselect the previous color
 
@@ -175,13 +181,29 @@ BOOL CALLBACK DlgPanelSettings(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lP
                     }
                     int ItemIndex = SendMessage(GetDlgItem(hwndDlg, BG_COLOR_COMBO), (UINT) CB_GETCURSEL,
                         (WPARAM) 0, (LPARAM) 0);
-                    bg_color[panel] = colorsList[ItemIndex];
+                    panels[panel].bg_color = colorsList[ItemIndex];
 
                     ItemIndex = SendMessage(GetDlgItem(hwndDlg, FG_COLOR_COMBO), (UINT) CB_GETCURSEL,
                         (WPARAM) 0, (LPARAM) 0);
-                    fg_color[panel] = colorsList[ItemIndex];
+                    panels[panel].fg_color = colorsList[ItemIndex];
 
                     SendMessage(GetDlgItem(hwndDlg, PANEL_TEXT_EDIT), WM_GETTEXT, (WPARAM)MAX_PANEL_LENGTH+1, (LPARAM)panelText[panel]);
+
+                    if(IsDlgButtonChecked(hwndDlg, FX_NONE_RAD) == BST_UNCHECKED)
+                    {
+                        if(IsDlgButtonChecked(hwndDlg, FX_LR_RAD) == BST_CHECKED)
+                        {
+                            panels[panel].effect = LR;
+                        }
+                        else if(IsDlgButtonChecked(hwndDlg, FX_RL_RAD) == BST_CHECKED)
+                        {
+                            panels[panel].effect = RL;
+                        }
+                        else if(IsDlgButtonChecked(hwndDlg, FX_NEG_RAD) == BST_CHECKED)
+                        {
+                            panels[panel].effect = NEG;
+                        }
+                    }
 
                     InvalidateRect(hwnd, NULL, TRUE);
                     UpdateWindow(hwnd);
@@ -612,7 +634,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
         g_szClassName,
         "Panel Manager",  /*window name*/
         WS_OVERLAPPEDWINDOW,
-        CW_USEDEFAULT, CW_USEDEFAULT, 1000, 600, /*the size of the window*/
+        CW_USEDEFAULT, CW_USEDEFAULT, 800, 600, /*the size of the window*/
         NULL, NULL, hInstance, NULL);
 
     if(hwnd == NULL)

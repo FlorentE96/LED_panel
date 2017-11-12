@@ -38,9 +38,10 @@
 #define IDOK_PANEL_SET                          40020
 #define IDCANCEL_PANEL_SET                      40021
 #define PANEL_TEXT_EDIT                         40022
-#define FX_RL_RAD                               40023
-#define FX_LR_RAD                               40024
-#define FX_NEG_RAD                              40025
-#define FG_COLOR_COMBO                          40026
-#define BG_COLOR_COMBO                          40027
+#define FX_NONE_RAD                             40023
+#define FX_RL_RAD                               40024
+#define FX_LR_RAD                               40025
+#define FX_NEG_RAD                              40026
+#define FG_COLOR_COMBO                          40027
+#define BG_COLOR_COMBO                          40028
 
