@@ -44,4 +44,5 @@
 #define FX_NEG_RAD                              40026
 #define FG_COLOR_COMBO                          40027
 #define BG_COLOR_COMBO                          40028
-
+#define SCROLL_SPEED_TEXT                       40029
+#define SCROLL_SPEED_SLIDER                     40030
