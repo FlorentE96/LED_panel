@@ -25,13 +25,40 @@ typedef struct Panel {
     COLORREF fg_color;
     //UINT panelLength;
     Effect effect;
+    char panelText[MAX_PANEL_LENGTH+1];
 } Panel;
 Panel panels[4];
 COLORREF colorsList[4] = {clrRed, clrBlack, clrYellow, clrGreen};
-char panelText[4][MAX_PANEL_LENGTH+1] = {0,};
 UINT panelLength = 5;
 DCB dcbSerialParams = { 0 }; // Initializing DCB structure
 
+inline std::string color2String(COLORREF color)
+{
+    if(color == clrRed)
+        return "Red";
+    if(color == clrGreen)
+        return "Green";
+    if(color == clrBlack)
+        return "Black";
+    if(color == clrYellow)
+        return "Yellow";
+    else
+        return "Black";
+}
+
+inline std::string effect2String(Effect effect)
+{
+    if(effect == NONE)
+        return "None";
+    if(effect == LR)
+        return "LeftRight";
+    if(effect == RL)
+        return "RightLeft";
+    if(effect == NEG)
+        return "Negative";
+    else
+        return "None";
+}
 
 inline COLORREF negativeMap(COLORREF color)
 {
@@ -42,6 +69,8 @@ inline COLORREF negativeMap(COLORREF color)
     if(color == clrBlack)
         return clrYellow;
     if(color == clrYellow)
+        return clrBlack;
+    else
         return clrBlack;
 }
 
@@ -57,6 +86,7 @@ int saveProjectFile(char * filename) {
     if (hFile == INVALID_HANDLE_VALUE)
         return 0;
     // TODO : write shit
+    // [length];[character set path];#[num panel];[fg_color];[bg_color];[effect];[text]
 
     CloseHandle(hFile);
     return 1;
@@ -161,7 +191,7 @@ BOOL CALLBACK DlgPanelSettings(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lP
 
         SendMessage(GetDlgItem(hwndDlg, PANEL_TEXT_EDIT),(UINT) EM_SETLIMITTEXT,(WPARAM) panelLength,(LPARAM) 0);
 
-        SendMessage(GetDlgItem(hwndDlg, PANEL_TEXT_EDIT),(UINT) WM_SETTEXT, 0,(LPARAM) panelText[panel]);
+        SendMessage(GetDlgItem(hwndDlg, PANEL_TEXT_EDIT),(UINT) WM_SETTEXT, 0,(LPARAM) panels[panel].panelText);
 
         CheckRadioButton(hwndDlg, FX_NONE_RAD, FX_NEG_RAD, FX_NONE_RAD);
 
@@ -200,7 +230,7 @@ BOOL CALLBACK DlgPanelSettings(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lP
                         (WPARAM) 0, (LPARAM) 0);
                     panels[panel].fg_color = colorsList[ItemIndex];
 
-                    SendMessage(GetDlgItem(hwndDlg, PANEL_TEXT_EDIT), WM_GETTEXT, (WPARAM)MAX_PANEL_LENGTH+1, (LPARAM)panelText[panel]);
+                    SendMessage(GetDlgItem(hwndDlg, PANEL_TEXT_EDIT), WM_GETTEXT, (WPARAM)MAX_PANEL_LENGTH+1, (LPARAM)panels[panel].panelText);
 
                     if(IsDlgButtonChecked(hwndDlg, FX_NONE_RAD) == BST_UNCHECKED)
                     {
@@ -342,13 +372,13 @@ BOOL CALLBACK DlgSerialConf(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lPara
                 int ItemIndex = SendMessage(GetDlgItem(hwndDlg, COM_COMBO), (UINT) CB_GETCURSEL,
                         (WPARAM) 0, (LPARAM) 0);
                 TCHAR  ListItem[256];
-                (TCHAR) SendMessage(GetDlgItem(hwndDlg, COM_COMBO), (UINT) CB_GETLBTEXT,
+                SendMessage(GetDlgItem(hwndDlg, COM_COMBO), (UINT) CB_GETLBTEXT,
                     (WPARAM) ItemIndex, (LPARAM) ListItem);
                 strcpy(com_port, ListItem);
 
                 ItemIndex = SendMessage(GetDlgItem(hwndDlg, BAUD_COMBO), (UINT) CB_GETCURSEL,
                         (WPARAM) 0, (LPARAM) 0);
-                (TCHAR) SendMessage(GetDlgItem(hwndDlg, BAUD_COMBO), (UINT) CB_GETLBTEXT,
+                SendMessage(GetDlgItem(hwndDlg, BAUD_COMBO), (UINT) CB_GETLBTEXT,
                     (WPARAM) ItemIndex, (LPARAM) ListItem);
                 dcbSerialParams.BaudRate = atoi(ListItem);
 
@@ -413,9 +443,9 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
             {
                 int iChar=0;
                 char myChar;
-                while(panelText[iPanel][iChar] != '\0' && iChar < MAX_PANEL_LENGTH+1)
+                while(panels[iPanel].panelText[iChar] != '\0' && iChar < MAX_PANEL_LENGTH+1)
                 {
-                    myChar = panelText[iPanel][iChar];
+                    myChar = panels[iPanel].panelText[iChar];
                     printCharacterOnPanel(hDC, iPanel,iChar,0, myChar);
                     iChar++;
                 }
