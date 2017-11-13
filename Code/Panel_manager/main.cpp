@@ -39,6 +39,17 @@ COLORREF colorsList[4] = {clrRed, clrBlack, clrYellow, clrGreen};
 UINT panelLength = 5;
 UINT scrollSpeedMillisec = 500;
 DCB dcbSerialParams = { 0 }; // Initializing DCB structure
+COMMTIMEOUTS timeouts = { 0 };
+
+inline char calculateChecksum(char* inString, int length)
+{
+    int sum=0;
+    for(int i=0; i<length; i++)
+    {
+        sum += inString[i];
+    }
+    return sum&0xFF;
+}
 
 inline std::string color2String(COLORREF color)
 {
@@ -114,19 +125,6 @@ int saveProjectFile(char * filename)
         printf("%s", panelData);
         WriteFile(hFile, panelData, strlen(panelData)+1, (LPDWORD)&bytesWritten, NULL);
     }
-//             \
-//                  #1;%d;%s;%s;%s;%s\n\r \
-//                  #2;%d;%s;%s;%s;%s\n\r \
-//                  #3;%d;%s;%s;%s;%s\n\r \
-//                  #4;%d;%s;%s;%s;%s", \
-//            panelLength, characterSetFile, \
-//            color2String(panels[0].fg_color),color2String(panels[0].bg_color),effect2String(panels[0].effect),panels[0].panelText, \
-//            color2String(panels[1].fg_color),color2String(panels[1].bg_color),effect2String(panels[1].effect),panels[1].panelText, \
-//            color2String(panels[2].fg_color),color2String(panels[2].bg_color),effect2String(panels[2].effect),panels[2].panelText, \
-//            color2String(panels[3].fg_color),color2String(panels[3].bg_color),effect2String(panels[3].effect),panels[3].panelText);
-////
-
-
     CloseHandle(hFile);
     return 1;
 }
@@ -175,7 +173,7 @@ int readCharacterBitmap(HANDLE hFile, char charID, BOOL charBMP[7][5])
     return 1;
 }
 
-void printCharacterOnPanel(HDC hDC, unsigned int panelIndex, int charOffsetX, int ledOffsetY, char characterID)
+void printCharacterOnGUIPanel(HDC hDC, unsigned int panelIndex, int charOffsetX, int ledOffsetY, char characterID)
 {
     int panelX = PANEL_OFFSET_LEFT + charOffsetX*70 + 2;
     int panelY = PANEL_OFFSET_TOP + 110*panelIndex + ledOffsetY + 2;
@@ -419,6 +417,12 @@ BOOL CALLBACK DlgSerialConf(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lPara
             {
             case IDOK_PORT:
             {
+                timeouts.ReadIntervalTimeout         = 50; // in milliseconds
+                timeouts.ReadTotalTimeoutConstant    = 50; // in milliseconds
+                timeouts.ReadTotalTimeoutMultiplier  = 10; // in milliseconds
+                timeouts.WriteTotalTimeoutConstant   = 50; // in milliseconds
+                timeouts.WriteTotalTimeoutMultiplier = 10; // in milliseconds
+
                 dcbSerialParams.DCBlength = sizeof(dcbSerialParams);
                 int ItemIndex = SendMessage(GetDlgItem(hwndDlg, COM_COMBO), (UINT) CB_GETCURSEL,
                         (WPARAM) 0, (LPARAM) 0);
@@ -497,7 +501,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
                 while(panels[iPanel].panelText[iChar] != '\0' && iChar < MAX_PANEL_LENGTH+1)
                 {
                     myChar = panels[iPanel].panelText[iChar];
-                    printCharacterOnPanel(hDC, iPanel,iChar,0, myChar);
+                    printCharacterOnGUIPanel(hDC, iPanel,iChar,0, myChar);
                     iChar++;
                 }
             }
@@ -516,7 +520,9 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
                         break;
                     case MENU_SERIAL_CONNECT:
                     {
-                        hComm = CreateFile((LPCSTR)com_port,          // for COM1—COM9 only
+                        if(hComm != NULL)
+                            CloseHandle(hComm);
+                        hComm = CreateFile((LPCSTR)com_port,       // for COM1—COM9 only
                            GENERIC_READ | GENERIC_WRITE, // Read/Write
                            0,               // No Sharing
                            NULL,            // No Security
@@ -547,6 +553,9 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
                                 (LPCSTR)"Success",
                                 MB_ICONINFORMATION | MB_OK | MB_DEFBUTTON1
                             );
+
+                        SetCommState(hComm, &dcbSerialParams);
+                        SetCommTimeouts(hComm, &timeouts);
                         break;
                     }
                     case MENU_CONF_PANEL:
@@ -686,6 +695,47 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
                                   MAKELPARAM((WORD)0,(WORD)3)
                                 );
                                 break;
+                            case MAIN_SEND1_BUTTON:
+                            {
+                                char lpBuffer[] = {'M','r',14,1,2,3,4,5,6,7,8,9,10,11,12,13,14};
+                                DWORD dNoOfBytesWritten = 0;     // No of bytes written to the port
+
+                                WriteFile(hComm,        // Handle to the Serial port
+                                       lpBuffer,     // Data to be written to the port
+                                       sizeof(lpBuffer),  //No of bytes to write
+                                       &dNoOfBytesWritten, //Bytes written
+                                       NULL);
+
+                                char TempChar; //Temporary character used for reading
+                                char SerialBuffer[256];//Buffer for storing Rxed Data
+                                DWORD NoBytesRead;
+                                int i = 0;
+
+                                do {
+                                   ReadFile( hComm,           //Handle of the Serial port
+                                             &TempChar,       //Temporary character
+                                             sizeof(TempChar),//Size of TempChar
+                                             &NoBytesRead,    //Number of bytes read
+                                             NULL);
+
+                                   SerialBuffer[i] = TempChar;// Store Tempchar into buffer
+                                   i++;
+                                }while (NoBytesRead > 0);
+                                printf("%s", SerialBuffer);
+                                break;
+                            }
+                            case MAIN_SEND2_BUTTON:
+                            {
+                                break;
+                            }
+                            case MAIN_SEND3_BUTTON:
+                            {
+                                break;
+                            }
+                            case MAIN_SEND4_BUTTON:
+                            {
+                                break;
+                            }
                         }
                         break;
                 }
