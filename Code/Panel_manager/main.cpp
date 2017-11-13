@@ -12,6 +12,9 @@
 #define PANEL_HEIGHT      (98)
 #define MAX_PANEL_LENGTH  (10)
 #define MIN_PANEL_LENGTH  (5)
+#define MAX_SCROLL_SPEED  (1500)
+#define MIN_SCROLL_SPEED  (50)
+
 
 const char g_szClassName[] = "myWindowClass";
 HINSTANCE hInst;
@@ -30,6 +33,7 @@ typedef struct Panel {
 Panel panels[4];
 COLORREF colorsList[4] = {clrRed, clrBlack, clrYellow, clrGreen};
 UINT panelLength = 5;
+UINT scrollSpeedMillisec = 500;
 DCB dcbSerialParams = { 0 }; // Initializing DCB structure
 
 inline std::string color2String(COLORREF color)
@@ -86,7 +90,22 @@ int saveProjectFile(char * filename) {
     if (hFile == INVALID_HANDLE_VALUE)
         return 0;
     // TODO : write shit
-    // [length];[character set path];#[num panel];[fg_color];[bg_color];[effect];[text]
+    // [length];[character set path];\n#[num panel];[fg_color];[bg_color];[effect];[text\n
+
+//    char colorString[10];
+//
+//    if
+////
+//    char data = sprintf("%d;%s\n\r
+//                        #1;%d;%s;%s;%s;%s\n\r
+//                        #2;%d;%s;%s;%s;%s\n\r
+//                        #3;%d;%s;%s;%s;%s\n\r
+//                        #4;%d;%s;%s;%s;%s",
+//                        panelLength, characterSetFile);
+//
+//    UINT bytesWritten;
+//    WriteFile(hFile, lpBuffer, sizeof(data), (LPDWORD)bytesWritten, NULL);
+
 
     CloseHandle(hFile);
     return 1;
@@ -276,6 +295,12 @@ BOOL CALLBACK DlgPanelConf(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam
         SendMessage(GetDlgItem(hwndDlg, PANEL_LENGTH_SLIDER), TBM_SETRANGE,FALSE, MAKELONG(MIN_PANEL_LENGTH, MAX_PANEL_LENGTH));
         SendMessage(GetDlgItem(hwndDlg, PANEL_LENGTH_SLIDER), TBM_SETPOS,TRUE, panelLength);
         SetDlgItemInt(hwndDlg, PANEL_LENGTH_TEXT, panelLength, FALSE);
+
+        SendMessage(GetDlgItem(hwndDlg, SCROLL_SPEED_SLIDER), TBM_SETRANGE,FALSE, MAKELONG(MIN_SCROLL_SPEED, MAX_SCROLL_SPEED));
+        SendMessage(GetDlgItem(hwndDlg, SCROLL_SPEED_SLIDER), TBM_SETTICFREQ,50, 0);
+
+        SendMessage(GetDlgItem(hwndDlg, SCROLL_SPEED_SLIDER), TBM_SETPOS,TRUE, scrollSpeedMillisec);
+        SetDlgItemInt(hwndDlg, SCROLL_SPEED_TEXT, scrollSpeedMillisec, FALSE);
         return TRUE;
     }
     case WM_CLOSE:
@@ -283,6 +308,7 @@ BOOL CALLBACK DlgPanelConf(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam
         return TRUE;
     case WM_HSCROLL:
         SetDlgItemInt(hwndDlg, PANEL_LENGTH_TEXT, SendMessage(GetDlgItem(hwndDlg, PANEL_LENGTH_SLIDER), TBM_GETPOS, 0, 0), FALSE);
+        SetDlgItemInt(hwndDlg, SCROLL_SPEED_TEXT, SendMessage(GetDlgItem(hwndDlg, SCROLL_SPEED_SLIDER), TBM_GETPOS, 0, 0), FALSE);
         return TRUE;
     case WM_COMMAND:
     {
@@ -294,6 +320,8 @@ BOOL CALLBACK DlgPanelConf(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam
             case IDOK_PORT:
             {
                 panelLength = SendMessage(GetDlgItem(hwndDlg, PANEL_LENGTH_SLIDER), TBM_GETPOS, 0, 0);
+                scrollSpeedMillisec = SendMessage(GetDlgItem(hwndDlg, SCROLL_SPEED_SLIDER), TBM_GETPOS, 0, 0);
+
                 InvalidateRect(hwnd, NULL, TRUE);
                 UpdateWindow(hwnd);
                 EndDialog(hwndDlg,0);
