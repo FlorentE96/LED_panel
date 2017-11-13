@@ -15,6 +15,18 @@
 #define MAX_SCROLL_SPEED  (1500)
 #define MIN_SCROLL_SPEED  (50)
 
+typedef enum Efect {NONE, LR, RL, NEG} Effect;
+typedef struct Panel
+{
+    COLORREF bg_color;
+    COLORREF fg_color;
+    //UINT panelLength;
+    Effect effect;
+    char panelText[MAX_PANEL_LENGTH+1];
+
+    Panel():bg_color(clrBlack),fg_color(clrRed),effect(NONE)
+    {}
+} Panel;
 
 const char g_szClassName[] = "myWindowClass";
 HINSTANCE hInst;
@@ -22,14 +34,6 @@ HWND hwnd;
 HANDLE hComm;
 TCHAR com_port[] = "COMX";
 TCHAR characterSetFile[MAX_PATH] = "void";
-typedef enum Efect {NONE, LR, RL, NEG} Effect;
-typedef struct Panel {
-    COLORREF bg_color;
-    COLORREF fg_color;
-    //UINT panelLength;
-    Effect effect;
-    char panelText[MAX_PANEL_LENGTH+1];
-} Panel;
 Panel panels[4];
 COLORREF colorsList[4] = {clrRed, clrBlack, clrYellow, clrGreen};
 UINT panelLength = 5;
@@ -78,7 +82,8 @@ inline COLORREF negativeMap(COLORREF color)
         return clrBlack;
 }
 
-int saveProjectFile(char * filename) {
+int saveProjectFile(char * filename)
+{
     HANDLE hFile = CreateFile((LPCTSTR) filename,
                 GENERIC_WRITE,
                 0,
@@ -89,29 +94,45 @@ int saveProjectFile(char * filename) {
     );
     if (hFile == INVALID_HANDLE_VALUE)
         return 0;
-    // TODO : write shit
     // [length];[character set path];\n#[num panel];[fg_color];[bg_color];[effect];[text\n
 
-//    char colorString[10];
-//
-//    if
+    char panelData[MAX_PATH+10]; // TODO : define max value
+    UINT bytesWritten;
+
+    sprintf(panelData, "%d;%s\n\r", panelLength, characterSetFile);
+    printf("%s", panelData);
+    WriteFile(hFile, panelData, strlen(panelData)+1, (LPDWORD)&bytesWritten, NULL);
+
+    for(int i=0; i<4; i++)
+    {
+        sprintf(panelData, "#%d;%d;%s;%s;%s;%s\n\r", i, panelLength,
+                                                     color2String(panels[0].fg_color).c_str(), \
+                                                     color2String(panels[0].bg_color).c_str(), \
+                                                     effect2String(panels[0].effect).c_str(), \
+                                                     panels[0].panelText);
+
+        printf("%s", panelData);
+        WriteFile(hFile, panelData, strlen(panelData)+1, (LPDWORD)&bytesWritten, NULL);
+    }
+//             \
+//                  #1;%d;%s;%s;%s;%s\n\r \
+//                  #2;%d;%s;%s;%s;%s\n\r \
+//                  #3;%d;%s;%s;%s;%s\n\r \
+//                  #4;%d;%s;%s;%s;%s", \
+//            panelLength, characterSetFile, \
+//            color2String(panels[0].fg_color),color2String(panels[0].bg_color),effect2String(panels[0].effect),panels[0].panelText, \
+//            color2String(panels[1].fg_color),color2String(panels[1].bg_color),effect2String(panels[1].effect),panels[1].panelText, \
+//            color2String(panels[2].fg_color),color2String(panels[2].bg_color),effect2String(panels[2].effect),panels[2].panelText, \
+//            color2String(panels[3].fg_color),color2String(panels[3].bg_color),effect2String(panels[3].effect),panels[3].panelText);
 ////
-//    char data = sprintf("%d;%s\n\r
-//                        #1;%d;%s;%s;%s;%s\n\r
-//                        #2;%d;%s;%s;%s;%s\n\r
-//                        #3;%d;%s;%s;%s;%s\n\r
-//                        #4;%d;%s;%s;%s;%s",
-//                        panelLength, characterSetFile);
-//
-//    UINT bytesWritten;
-//    WriteFile(hFile, lpBuffer, sizeof(data), (LPDWORD)bytesWritten, NULL);
 
 
     CloseHandle(hFile);
     return 1;
 }
 
-int loadProjectFile(char * filename) {
+int loadProjectFile(char * filename)
+{
     HANDLE hFile = CreateFile((LPCTSTR) filename,
                 GENERIC_READ,
                 0,
@@ -126,7 +147,8 @@ int loadProjectFile(char * filename) {
     return 1;
 }
 
-int readCharacterBitmap(HANDLE hFile, char charID, BOOL charBMP[7][5]) {
+int readCharacterBitmap(HANDLE hFile, char charID, BOOL charBMP[7][5])
+{
     SetFilePointer(hFile, 0, NULL, FILE_BEGIN);
     DWORD nBytesRead=0;
     BOOL bResult = FALSE;
@@ -153,7 +175,8 @@ int readCharacterBitmap(HANDLE hFile, char charID, BOOL charBMP[7][5]) {
     return 1;
 }
 
-void printCharacterOnPanel(HDC hDC, unsigned int panelIndex, int charOffsetX, int ledOffsetY, char characterID) {
+void printCharacterOnPanel(HDC hDC, unsigned int panelIndex, int charOffsetX, int ledOffsetY, char characterID)
+{
     int panelX = PANEL_OFFSET_LEFT + charOffsetX*70 + 2;
     int panelY = PANEL_OFFSET_TOP + 110*panelIndex + ledOffsetY + 2;
 
