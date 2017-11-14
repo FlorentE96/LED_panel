@@ -49,7 +49,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 
             FillRect(hDC,&panel1,myBrush);
 
-            printCharacterOnPanel(hDC, 0, 0, 0, character);
+            printCharacterOnPanel(hDC, 0, 1, 0, character);
 
             EndPaint(hwnd, &ps);
         }
@@ -440,7 +440,7 @@ void storeRXmsg(int bank, bool LEDcolor, char msgSize){
 }
 
 int openSerial(void) {
-     hComm = CreateFile(com_port,          // for COM1—COM9 only
+     hComm = CreateFile(com_port,          // for COM1Â—COM9 only
                         GENERIC_READ,    // Read only
                         0,               // No Sharing
                         NULL,            // No Security
