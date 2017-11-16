@@ -20,7 +20,7 @@ char REDbank[2][56];
 char GREENbank[2][56];
 bool characterRED[35] = {1,0,0,0,0,1,0,0,0,0,0,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1,1,1,1,1};
 bool characterGREEN[35] = {0,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1,1,1,1,1};
-
+bool currentBank;
 //functions
 BOOL CALLBACK DlgPanelConf(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam);
 BOOL CALLBACK DlgSerialConf(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam);
@@ -262,7 +262,12 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
                 }
             }
             if (SerialBuffer[0]=='B'){        /*check if is a bank change*/
-
+                if(SerialBuffer[1]=='0'){
+                    currentBank=0;
+                }
+                else {
+                    currentBank=1;
+                }
 
             }
         }
