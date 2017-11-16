@@ -18,12 +18,13 @@ bool Status;
 char SerialBuffer[256];//Buffer for storing Rxed Data
 char REDbank[2][56];
 char GREENbank[2][56];
-bool character[35] = {1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1,1,1,1,1};
+bool characterRED[35] = {1,0,0,0,0,1,0,0,0,0,0,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1,1,1,1,1};
+bool characterGREEN[35] = {0,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1,1,1,1,1};
 
 //functions
 BOOL CALLBACK DlgPanelConf(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam);
 BOOL CALLBACK DlgSerialConf(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam);
-void printCharacterOnPanel(HDC hDC, unsigned int panelIndex, int charOffsetX, int ledOffsetY, bool character[35]);
+void printCharacterOnPanel(HDC hDC, unsigned int panelIndex, int charOffsetX, int ledOffsetY);
 int openSerial(void);
 void storeRXmsg(int bank, bool LEDcolor, char msgSize);
 
@@ -49,7 +50,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 
             FillRect(hDC,&panel1,myBrush);
 
-            printCharacterOnPanel(hDC, 0, 1, 0, character);
+            printCharacterOnPanel(hDC, 0, 1, 0);
 
             EndPaint(hwnd, &ps);
         }
@@ -455,11 +456,19 @@ int openSerial(void) {
                         MB_OK);
         return 0;
     }
+    else {
+        MessageBox(             NULL,
+                                (LPCSTR)"COM Port successfully opened",
+                                (LPCSTR)"Success",
+                                MB_ICONINFORMATION | MB_OK | MB_DEFBUTTON1
+        );
+
+    }
     printf("connected");
     return 1;
 }
 
-void printCharacterOnPanel(HDC hDC, unsigned int panelIndex, int charOffsetX, int ledOffsetY, bool character[35]) {
+void printCharacterOnPanel(HDC hDC, unsigned int panelIndex, int charOffsetX, int ledOffsetY) {
     int panelX = 10 + charOffsetX*70 + 2;
     int panelY = 50 + 110*panelIndex + ledOffsetY + 2;
 
@@ -469,8 +478,17 @@ void printCharacterOnPanel(HDC hDC, unsigned int panelIndex, int charOffsetX, in
     for(int ledY = 0; ledY < 7; ledY++) {
         for(int ledX = 0; ledX < 5; ledX++) {
             LEDRect = { panelX, panelY, panelX+10, panelY+10 };
-            if (character[pos] == 1){
-            FillRect(hDC,&LEDRect,myBrush);
+            if (characterRED[pos] & characterGREEN[pos]){
+                HBRUSH myBrush = CreateSolidBrush(clrYellow);
+                FillRect(hDC,&LEDRect,myBrush);
+                }
+            else if (characterRED[pos] & !characterGREEN[pos]){
+                HBRUSH myBrush = CreateSolidBrush(clrRed);
+                FillRect(hDC,&LEDRect,myBrush);
+            }
+            else if (!characterRED[pos] & characterGREEN[pos]){
+                HBRUSH myBrush = CreateSolidBrush(clrGreen);
+                FillRect(hDC,&LEDRect,myBrush);
             }
             pos++;
             panelX += 14;
