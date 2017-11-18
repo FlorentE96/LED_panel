@@ -107,22 +107,23 @@ int saveProjectFile(char * filename)
         return 0;
     // [length];[character set path];\n#[num panel];[fg_color];[bg_color];[effect];[text\n
 
-    char panelData[MAX_PATH+10]; // TODO : define max value
+
     UINT bytesWritten;
+{
+    char panelData[MAX_PATH+10]; // TODO : define max value
 
-    sprintf(panelData, "%d;%s\n\r", panelLength, characterSetFile);
-    printf("%s", panelData);
+    sprintf(panelData, "[global]\n\rlength=%d\n\rspeed=%d\n\rcharacter_file=%s\n\r", panelLength, scrollSpeedMillisec, characterSetFile);
     WriteFile(hFile, panelData, strlen(panelData)+1, (LPDWORD)&bytesWritten, NULL);
+}
 
+    char panelData[300]; // TODO : define max value
     for(int i=0; i<4; i++)
     {
-        sprintf(panelData, "#%d;%d;%s;%s;%s;%s\n\r", i, panelLength,
-                                                     color2String(panels[0].fg_color).c_str(), \
-                                                     color2String(panels[0].bg_color).c_str(), \
-                                                     effect2String(panels[0].effect).c_str(), \
-                                                     panels[0].panelText);
-
-        printf("%s", panelData);
+        sprintf(panelData, "[panel%d]\n\rfg_color=%s\n\rbg_color=%s\n\reffect=%s\n\rtext=%s\n\r", i,
+                             color2String(panels[i].fg_color).c_str(), \
+                             color2String(panels[i].bg_color).c_str(), \
+                             effect2String(panels[i].effect).c_str(), \
+                             panels[i].panelText);
         WriteFile(hFile, panelData, strlen(panelData)+1, (LPDWORD)&bytesWritten, NULL);
     }
     CloseHandle(hFile);
@@ -131,17 +132,35 @@ int saveProjectFile(char * filename)
 
 int loadProjectFile(char * filename)
 {
-    HANDLE hFile = CreateFile((LPCTSTR) filename,
-                GENERIC_READ,
-                0,
-                NULL,
-                OPEN_EXISTING,
-                FILE_ATTRIBUTE_NORMAL,
-                NULL
-    );
-    if (hFile == INVALID_HANDLE_VALUE)
-        return 0;
-    // TODO : parse file
+    char myResult[10];
+    GetPrivateProfileString("global","length","5",myResult,sizeof(myResult),filename);
+    panelLength = atoi(myResult);
+
+    GetPrivateProfileString("global","speed","500",myResult,sizeof(myResult),filename);
+    scrollSpeedMillisec = atoi(myResult);
+
+    GetPrivateProfileString("global","character_file","void",characterSetFile,sizeof(characterSetFile),filename);
+
+    for(int i=0; i<4; i++)
+    {
+        char panelString[6];
+        sprintf(panelString, "panel%d", i);
+
+        char data[15];
+
+        GetPrivateProfileString(panelString,"fg_color","red",data,sizeof(data),filename);
+        //panels[i].fg_color = string2color(data);
+        GetPrivateProfileString(panelString,"bg_color","black",data,sizeof(data),filename);
+        //panels[i].bg_color = string2color(data);
+        GetPrivateProfileString(panelString,"effect","none",data,sizeof(data),filename);
+        //panels[i].effect = string2effect(data);
+
+        GetPrivateProfileString(panelString,"text","",panels[i].panelText,sizeof(panels[i].panelText),filename);
+
+    }
+
+    InvalidateRect(hwnd, NULL, TRUE);
+    UpdateWindow(hwnd);
     return 1;
 }
 
@@ -697,7 +716,8 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
                                 break;
                             case MAIN_SEND1_BUTTON:
                             {
-                                char lpBuffer[] = {'M','r',14,1,2,3,4,5,6,7,8,9,10,11,12,13,14};
+                                char lpBuffer[18] = {'M','r',14,1,2,3,4,5,6,7,8,9,10,11,12,13,14,0};
+                                lpBuffer[18] = calculateChecksum(lpBuffer, 17);
                                 DWORD dNoOfBytesWritten = 0;     // No of bytes written to the port
 
                                 WriteFile(hComm,        // Handle to the Serial port
