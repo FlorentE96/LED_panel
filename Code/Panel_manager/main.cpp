@@ -65,6 +65,20 @@ inline std::string color2String(COLORREF color)
         return "Black";
 }
 
+inline COLORREF string2Color(char color[])
+{
+    if(!strcmp(color, "Red"))
+        return clrRed;
+    if(!strcmp(color, "Green"))
+        return clrGreen;
+    if(!strcmp(color, "Black"))
+        return clrBlack;
+    if(!strcmp(color, "Yellow"))
+        return clrYellow;
+    else
+        return clrBlack;
+}
+
 inline std::string effect2String(Effect effect)
 {
     if(effect == NONE)
@@ -77,6 +91,20 @@ inline std::string effect2String(Effect effect)
         return "Negative";
     else
         return "None";
+}
+
+inline Effect string2Effect(char effect[])
+{
+    if(!strcmp(effect, "None"))
+        return NONE;
+    if(!strcmp(effect, "LeftRight"))
+        return LR;
+    if(!strcmp(effect, "RightLeft"))
+        return RL;
+    if(!strcmp(effect, "Negative"))
+        return NEG;
+    else
+        return NONE;
 }
 
 inline COLORREF negativeMap(COLORREF color)
@@ -149,11 +177,11 @@ int loadProjectFile(char * filename)
         char data[15];
 
         GetPrivateProfileString(panelString,"fg_color","red",data,sizeof(data),filename);
-        //panels[i].fg_color = string2color(data);
+        panels[i].fg_color = string2Color(data);
         GetPrivateProfileString(panelString,"bg_color","black",data,sizeof(data),filename);
-        //panels[i].bg_color = string2color(data);
+        panels[i].bg_color = string2Color(data);
         GetPrivateProfileString(panelString,"effect","none",data,sizeof(data),filename);
-        //panels[i].effect = string2effect(data);
+        panels[i].effect = string2Effect(data);
 
         GetPrivateProfileString(panelString,"text","",panels[i].panelText,sizeof(panels[i].panelText),filename);
 
