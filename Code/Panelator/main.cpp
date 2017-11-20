@@ -17,15 +17,14 @@ DCB dcbSerialParams = { 0 }; // Initializing DCB (serial) structure
 HWND hwnd;
 int panelLength = 8;
 DWORD dwEventMask;
-char SerialBuffer[256];//Buffer for storing Rxed Data
+char SerialBuffer[255];//Buffer for storing Rxed Data
 COMMTIMEOUTS timeouts = { 0 };
-char REDbank[2][56];
-char GREENbank[2][56];
-bool characterRED[8][35];  //{{1,0,0,0,0,1,0,0,0,0,0,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1,1,1,1,1}};
-bool characterGREEN[8][35]; //{{0,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1,1,1,1,1}};
+char REDbank[2][70];
+char GREENbank[2][70];
+bool characterRED[10][35];
+bool characterGREEN[10][35];
 int i = 0;
 
-bool currentBank;
 //functions
 BOOL CALLBACK DlgPanelConf(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam);
 BOOL CALLBACK DlgSerialConf(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam);
@@ -54,6 +53,23 @@ if (SerialBuffer[i-1] == 13){
     }
 }
 
+void CALLBACK updDsp(void){
+    HDC         hDC;
+    PAINTSTRUCT ps;
+    RECT        panel1 = { 10, 20+30, panelLength*70+10, 98+20+30 };
+
+    HBRUSH myBrush = CreateSolidBrush(clrBlack);
+
+    hDC = BeginPaint(hwnd, &ps);
+
+    FillRect(hDC,&panel1,myBrush);
+    char g = 0;
+    while (g < panelLength){
+    printCharacterOnPanel(hDC, 0, g, 0);
+    g++;
+    }
+    EndPaint(hwnd, &ps);
+}
 
 
 void serialTreat(void){
@@ -62,7 +78,7 @@ void serialTreat(void){
     if (SerialBuffer[0]== 'M'){        /*check if is a message*/
         switch (SerialBuffer[1]){      /*check in which bank it should be stored*/
             case 'r': /*bank 0, red*/
-                printf("\nmsg stored at r0");
+                printf("\nmsg stored at R0");
                 storeRXmsg(0, 1, SerialBuffer[2]);
 
                 break;
@@ -72,7 +88,7 @@ void serialTreat(void){
                 break;
             case 'g': /*bank 0, green*/
                 storeRXmsg(0, 0, SerialBuffer[2]);
-                printf("\nmsg stored at g0");
+                printf("\nmsg stored at G0");
                 break;
             case 'G': /*bank 1, green*/
                 storeRXmsg(1, 0, SerialBuffer[2]);
@@ -82,14 +98,12 @@ void serialTreat(void){
     }
     if (SerialBuffer[0]=='B'){        /*check if is a bank change*/
         if(SerialBuffer[1]=='0'){
-            currentBank=0;
-            printf("\nchegou");
+            printf("\ncalled b0");
             byteToBool(0);
             //convert current bank message to bool arry and store it at characterRED and characterGREEN
         }
         else{
-            printf("\nchegou");
-            currentBank=0;
+            printf("\ncalled b1");
             byteToBool(1);
         }
 
@@ -124,6 +138,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
             g++;
             }
             EndPaint(hwnd, &ps);
+        break;
         }
         case WM_COMMAND:{
             if (HIWORD(wParam) == 1 || HIWORD(wParam) == 0){
@@ -143,23 +158,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
                 }
             } else{
                 switch(HIWORD(wParam)){
-                    case BN_CLICKED:{
-                        switch(LOWORD(wParam)){
-                            case ADD_BN:
-                                printf("add");
-                                break;
-                            case DELETE_BN:
-                                printf("add");
-                                break;
-                            case INSERT_BN:
-                                printf("add");
-                                break;
-                            case PLAY_BN:
-                                printf("add");
-                                break;
-                        }
-                        break;
-                    }
+
                 }
             }
         break;
@@ -174,7 +173,6 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
     LPSTR lpCmdLine, int nCmdShow) /*these parameters are given by the OS to the application so it can run on top of it*/
 {
-
     WNDCLASSEX wc;
     HWND hwnd;      /*window handler*/
     MSG Msg;
@@ -196,7 +194,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
     if(!RegisterClassEx(&wc))
     {
         MessageBox(NULL, "Window Registration Failed!", "Error!",
-            MB_ICONEXCLAMATION | MB_OK);
+        MB_ICONEXCLAMATION | MB_OK);
         return 0;
     }
 
@@ -206,7 +204,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
         g_szClassName,
         "Panel Animator",  /*window name*/
         WS_OVERLAPPEDWINDOW,
-        CW_USEDEFAULT, CW_USEDEFAULT, 600, 220, /*the size of the window*/
+        CW_USEDEFAULT, CW_USEDEFAULT, 600, 240, /*the size of the window*/
         NULL, NULL, hInstance, NULL);
 
     if(hwnd == NULL)
@@ -215,7 +213,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
             MB_ICONEXCLAMATION | MB_OK);
         return 0;
     }
-
     ShowWindow(hwnd, nCmdShow);  /*needs to be done to create a windows*/
     UpdateWindow(hwnd);          /*should be done everytime a "widget" is added*/
 
@@ -419,7 +416,7 @@ int openSerial(void) {
         return 0;
     }
     else {
-        printf("connected");
+
         MessageBox(             NULL,
                                 (LPCSTR)"COM Port successfully opened",
                                 (LPCSTR)"Success",
@@ -430,6 +427,7 @@ int openSerial(void) {
     SetTimer(hwnd, TIMER1, 5, (TIMERPROC)func1);
     SetCommState(hComm, &dcbSerialParams);
     SetCommTimeouts(hComm, &timeouts);
+    printf("\nconnected");
     return 1;
 }
 
@@ -461,6 +459,7 @@ void printCharacterOnPanel(HDC hDC, unsigned int panelIndex, int charOffsetX, in
         panelY += 14;
         panelX = 10 + charOffsetX*70 + 2;
     }
+printf("\nprinted on disp");
 }
 
 void byteToBool(int bank){
@@ -469,14 +468,14 @@ int panelBit = 0;
     for(int character = 0; character < panelLength; character ++){
         for (int l = 0; l < 7; l++){
             for (int j = 0; j < 5; j++){
-                characterRED[character][pos+j] = (REDbank[bank][l] & (1 >> j));
-                characterGREEN[character][pos+j] = (GREENbank[bank][l] & (1 >> j));
+                characterRED[character][pos + j] = (REDbank[bank][l] & (1 >> j));
+                characterGREEN[character][pos + j] = (GREENbank[bank][l] & (1 >> j));
             }
         pos = pos + 5;
         }
     pos = 0;
     }
-
+updDsp();
 }
 
 
