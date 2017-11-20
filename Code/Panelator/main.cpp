@@ -5,6 +5,9 @@
 #include <iostream>
 #include "resource.h"
 #include "colors.h"
+
+#define TIMER1 1001
+
 //vars
 const char g_szClassName[] = "myWindowClass";
 HANDLE hComm;
@@ -14,12 +17,14 @@ DCB dcbSerialParams = { 0 }; // Initializing DCB (serial) structure
 HWND hwnd;
 int panelLength = 8;
 DWORD dwEventMask;
-bool Status;
 char SerialBuffer[256];//Buffer for storing Rxed Data
+COMMTIMEOUTS timeouts = { 0 };
 char REDbank[2][56];
 char GREENbank[2][56];
-bool characterRED[35] = {1,0,0,0,0,1,0,0,0,0,0,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1,1,1,1,1};
-bool characterGREEN[35] = {0,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1,1,1,1,1};
+bool characterRED[8][35];  //{{1,0,0,0,0,1,0,0,0,0,0,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1,1,1,1,1}};
+bool characterGREEN[8][35]; //{{0,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1,1,1,1,1}};
+int i = 0;
+
 bool currentBank;
 //functions
 BOOL CALLBACK DlgPanelConf(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam);
@@ -27,6 +32,70 @@ BOOL CALLBACK DlgSerialConf(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lPara
 void printCharacterOnPanel(HDC hDC, unsigned int panelIndex, int charOffsetX, int ledOffsetY);
 int openSerial(void);
 void storeRXmsg(int bank, bool LEDcolor, char msgSize);
+void byteToBool(int bank);
+void serialTreat(void);
+
+
+void CALLBACK func1(){
+DWORD NBytesRead;
+if(hComm == INVALID_HANDLE_VALUE){
+    printf("serial receive error");
+}
+
+ReadFile( hComm,           //Handle of the Serial port
+         &SerialBuffer[i],       //Temporary character
+         1,//Size of TempChar
+         &NBytesRead,    //Number of bytes read
+         NULL);
+    printf("%s",&SerialBuffer[i]);
+    i++;
+if (SerialBuffer[i-1] == 13){
+        serialTreat();
+    }
+}
+
+
+
+void serialTreat(void){
+    printf("\nmensagem totalmente recebida");
+    i = 0;
+    if (SerialBuffer[0]== 'M'){        /*check if is a message*/
+        switch (SerialBuffer[1]){      /*check in which bank it should be stored*/
+            case 'r': /*bank 0, red*/
+                printf("\nmsg stored at r0");
+                storeRXmsg(0, 1, SerialBuffer[2]);
+
+                break;
+            case 'R': /*bank 1, red*/
+                storeRXmsg(1, 1, SerialBuffer[2]);
+                printf("\nmsg stored at R1");
+                break;
+            case 'g': /*bank 0, green*/
+                storeRXmsg(0, 0, SerialBuffer[2]);
+                printf("\nmsg stored at g0");
+                break;
+            case 'G': /*bank 1, green*/
+                storeRXmsg(1, 0, SerialBuffer[2]);
+                printf("\nmsg stored at G1");
+                break;
+        }
+    }
+    if (SerialBuffer[0]=='B'){        /*check if is a bank change*/
+        if(SerialBuffer[1]=='0'){
+            currentBank=0;
+            printf("\nchegou");
+            byteToBool(0);
+            //convert current bank message to bool arry and store it at characterRED and characterGREEN
+        }
+        else{
+            printf("\nchegou");
+            currentBank=0;
+            byteToBool(1);
+        }
+
+    }
+memset(SerialBuffer, 0, 255);
+}
 
 LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {   /*this part of the code process the "events" since it's a event oriented language*/
@@ -49,9 +118,11 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
             hDC = BeginPaint(hwnd, &ps);
 
             FillRect(hDC,&panel1,myBrush);
-
-            printCharacterOnPanel(hDC, 0, 1, 0);
-
+            char g = 0;
+            while (g < panelLength){
+            printCharacterOnPanel(hDC, 0, g, 0);
+            g++;
+            }
             EndPaint(hwnd, &ps);
         }
         case WM_COMMAND:{
@@ -65,7 +136,6 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
                         break;
                     case MENU_START_BN:
                         openSerial();
-                        SetCommMask(hComm, EV_RXCHAR);
                         break;
                     case MENU_CONF_PANEL:
                         DialogBox(hInst, MAKEINTRESOURCE(IDD_DIALOG_PANEL_CONF), NULL, (DLGPROC)DlgPanelConf);
@@ -104,6 +174,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
     LPSTR lpCmdLine, int nCmdShow) /*these parameters are given by the OS to the application so it can run on top of it*/
 {
+
     WNDCLASSEX wc;
     HWND hwnd;      /*window handler*/
     MSG Msg;
@@ -145,133 +216,11 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
         return 0;
     }
 
-    //====== buttons and shit
-    HWND hwndButton = CreateWindow("BUTTON",   /*a button and every other widget is called "window" but have different parameters*/
-                                   "Add",
-                                   WS_TABSTOP | WS_VISIBLE | WS_CHILD | BS_DEFPUSHBUTTON,
-                                   10, /*x*/
-                                   10, /*y*/
-                                   50, /*size x*/
-                                   30, /*size y*/
-                                   hwnd,
-                                   (HMENU)ADD_BN,
-                                   (HINSTANCE)GetWindowLong(hwnd, GWL_HINSTANCE),
-                                   NULL);
-
-    HWND hwndButton2 = CreateWindow("BUTTON",
-                                   "Insert",
-                                   WS_TABSTOP | WS_VISIBLE | WS_CHILD | BS_DEFPUSHBUTTON,
-                                   70,
-                                   10,
-                                   50,
-                                   30,
-                                   hwnd,
-                                   (HMENU)INSERT_BN,
-                                   (HINSTANCE)GetWindowLong(hwnd, GWL_HINSTANCE),
-                                   NULL);
-
-    HWND hwndButton3 = CreateWindow("BUTTON",
-                                   "Delete",
-                                   WS_TABSTOP | WS_VISIBLE | WS_CHILD | BS_DEFPUSHBUTTON,
-                                   130,
-                                   10,
-                                   50,
-                                   30,
-                                   hwnd,
-                                   (HMENU)DELETE_BN,
-                                   (HINSTANCE)GetWindowLongPtr(hwnd, GWLP_HINSTANCE),
-                                   NULL);
-
-    HWND hwndButton4 = CreateWindow("BUTTON",
-                                   "Play",
-                                   WS_TABSTOP | WS_VISIBLE | WS_CHILD | BS_DEFPUSHBUTTON,
-                                   190,
-                                   10,
-                                   50,
-                                   30,
-                                   hwnd,
-                                   (HMENU)PLAY_BN,
-                                   (HINSTANCE)GetWindowLong(hwnd, GWL_HINSTANCE),
-                                   NULL);
-
-
-
-    HWND hWndComboBox = CreateWindow( WC_COMBOBOX,
-                                      TEXT("yay"),
-                                      CBS_DROPDOWN | CBS_HASSTRINGS | WS_CHILD | WS_OVERLAPPED | WS_VISIBLE,
-                                      320,
-                                      10,
-                                      70,
-                                      30,
-                                      hwnd,
-                                      NULL,
-                                      (HINSTANCE)GetWindowLong(hwnd, GWL_HINSTANCE),
-                                      NULL);
-
-    HWND hWndComboBox2 = CreateWindow( WC_COMBOBOX,
-                                      TEXT("yay"),
-                                      CBS_DROPDOWN | CBS_HASSTRINGS | WS_CHILD | WS_OVERLAPPED | WS_VISIBLE,
-                                      400,
-                                      10,
-                                      70,
-                                      30,
-                                      hwnd,
-                                      NULL,
-                                      (HINSTANCE)GetWindowLong(hwnd, GWL_HINSTANCE),
-                                      NULL);
-
     ShowWindow(hwnd, nCmdShow);  /*needs to be done to create a windows*/
     UpdateWindow(hwnd);          /*should be done everytime a "widget" is added*/
 
-    TextOut(GetDC(hwnd), 250, 15, "frame 1/1", 9);  /*IDK why, but the text only worked here */
-
-    // Step 3: The Message Loop
-    while(GetMessage(&Msg, NULL, 0, 0) > 0)
-    {   /*this part of the code is like a while loop that runs everytime*/
-        if(WaitCommEvent(hComm, &dwEventMask, NULL)){
-            printf("receiving data");
-            char TempChar; //Temporary character used for reading
-            DWORD NoBytesRead;
-            int i = 0;
-                do{
-                   ReadFile( hComm,           //Handle of the Serial port
-                             &TempChar,       //Temporary character
-                             sizeof(TempChar),//Size of TempChar
-                             &NoBytesRead,    //Number of bytes read
-                             NULL);
-
-                   SerialBuffer[i] = TempChar;// Store Tempchar into buffer
-                   i++;
-                }while (NoBytesRead > 0);
-
-            if (SerialBuffer[0]== 'M'){        /*check if is a message*/
-                switch (SerialBuffer[1]){      /*check from which bank it should be*/
-                    case 'r': /*bank 0, red*/
-                        storeRXmsg(0, 1, SerialBuffer[2]);
-                        break;
-                    case 'R': /*bank 1, red*/
-                        storeRXmsg(1, 1, SerialBuffer[2]);
-                        break;
-                    case 'g': /*bank 0, green*/
-                        storeRXmsg(0, 0, SerialBuffer[2]);
-                        break;
-                    case 'G': /*bank 1, green*/
-                        storeRXmsg(1, 0, SerialBuffer[2]);
-                        break;
-
-                }
-            }
-            if (SerialBuffer[0]=='B'){        /*check if is a bank change*/
-                if(SerialBuffer[1]=='0'){
-                    currentBank=0;
-                }
-                else {
-                    currentBank=1;
-                }
-
-            }
-        }
-
+    while(GetMessage(&Msg, NULL, 0, 0) > 0){
+    /*this part of the code is like a while loop that runs everytime*/
         TranslateMessage(&Msg);
         DispatchMessage(&Msg);
     }
@@ -289,7 +238,7 @@ BOOL CALLBACK DlgSerialConf(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lPara
         SendMessage(GetDlgItem(hwndDlg, COM_COMBO),(UINT) CB_ADDSTRING,(WPARAM) 0,(LPARAM) "COM3");
         SendMessage(GetDlgItem(hwndDlg, COM_COMBO),(UINT) CB_ADDSTRING,(WPARAM) 0,(LPARAM) "COM4");
         SendMessage(GetDlgItem(hwndDlg, COM_COMBO),(UINT) CB_ADDSTRING,(WPARAM) 0,(LPARAM) "COM5");
-        SendMessage(GetDlgItem(hwndDlg, COM_COMBO), CB_SETCURSEL, (WPARAM)2, (LPARAM)0);
+        SendMessage(GetDlgItem(hwndDlg, COM_COMBO), CB_SETCURSEL, (WPARAM)1, (LPARAM)0);
 
         SendMessage(GetDlgItem(hwndDlg, BAUD_COMBO),(UINT) CB_ADDSTRING,(WPARAM) 0,(LPARAM) "4800");
         SendMessage(GetDlgItem(hwndDlg, BAUD_COMBO),(UINT) CB_ADDSTRING,(WPARAM) 0,(LPARAM) "9600");
@@ -302,7 +251,7 @@ BOOL CALLBACK DlgSerialConf(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lPara
         SendMessage(GetDlgItem(hwndDlg, PAR_COMBO),(UINT) CB_ADDSTRING,(WPARAM) 0,(LPARAM) "No parity");
         SendMessage(GetDlgItem(hwndDlg, PAR_COMBO),(UINT) CB_ADDSTRING,(WPARAM) 0,(LPARAM) "Odd");
         SendMessage(GetDlgItem(hwndDlg, PAR_COMBO),(UINT) CB_ADDSTRING,(WPARAM) 0,(LPARAM) "Even");
-        SendMessage(GetDlgItem(hwndDlg, PAR_COMBO), CB_SETCURSEL, (WPARAM)1, (LPARAM)0);
+        SendMessage(GetDlgItem(hwndDlg, PAR_COMBO), CB_SETCURSEL, (WPARAM)0, (LPARAM)0);
 
         SendMessage(GetDlgItem(hwndDlg, STOPBITS_COMBO),(UINT) CB_ADDSTRING,(WPARAM) 0,(LPARAM) "1");
         SendMessage(GetDlgItem(hwndDlg, STOPBITS_COMBO),(UINT) CB_ADDSTRING,(WPARAM) 0,(LPARAM) "2");
@@ -335,6 +284,12 @@ BOOL CALLBACK DlgSerialConf(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lPara
             {
             case IDOK_PORT:
             {
+
+                timeouts.ReadIntervalTimeout         = 50; // in milliseconds
+                timeouts.ReadTotalTimeoutConstant    = 50; // in milliseconds
+                timeouts.ReadTotalTimeoutMultiplier  = 10; // in milliseconds
+                timeouts.WriteTotalTimeoutConstant   = 50; // in milliseconds
+                timeouts.WriteTotalTimeoutMultiplier = 10; // in milliseconds
 
                 dcbSerialParams.DCBlength = sizeof(dcbSerialParams);
                 int ItemIndex = SendMessage(GetDlgItem(hwndDlg, COM_COMBO), (UINT) CB_GETCURSEL,
@@ -431,22 +386,24 @@ void storeRXmsg(int bank, bool LEDcolor, char msgSize){
     LEDcolor = 0 -> green
     msgSize is a char containing the number of bytes to be read
 */
-    if (LEDcolor==1){
-        for (int i=0;i=msgSize;i++){
-            REDbank[bank][i] = SerialBuffer[i+2];
+    if (LEDcolor == 1){
+        for (int t=0;t<msgSize;t++){
+            REDbank[bank][t] = SerialBuffer[t+3];
         }
+        printf("\n");
+        printf(REDbank[0]);
     }
     else{
-        for (int i=0;i=msgSize;i++){
-            GREENbank[bank][i] = SerialBuffer[i+2];
+        for (int t=0;t<msgSize;t++){
+            GREENbank[bank][t] = SerialBuffer[t+3];
         }
     }
-
-
-}
+ }
 
 int openSerial(void) {
-     hComm = CreateFile(com_port,          // for COM1COM9 only
+    if(hComm != NULL)
+        CloseHandle(hComm);
+    hComm = CreateFile(com_port,         // for COM1-COM9 only
                         GENERIC_READ,    // Read only
                         0,               // No Sharing
                         NULL,            // No Security
@@ -462,6 +419,7 @@ int openSerial(void) {
         return 0;
     }
     else {
+        printf("connected");
         MessageBox(             NULL,
                                 (LPCSTR)"COM Port successfully opened",
                                 (LPCSTR)"Success",
@@ -469,7 +427,9 @@ int openSerial(void) {
         );
 
     }
-    printf("connected");
+    SetTimer(hwnd, TIMER1, 5, (TIMERPROC)func1);
+    SetCommState(hComm, &dcbSerialParams);
+    SetCommTimeouts(hComm, &timeouts);
     return 1;
 }
 
@@ -483,15 +443,15 @@ void printCharacterOnPanel(HDC hDC, unsigned int panelIndex, int charOffsetX, in
     for(int ledY = 0; ledY < 7; ledY++) {
         for(int ledX = 0; ledX < 5; ledX++) {
             LEDRect = { panelX, panelY, panelX+10, panelY+10 };
-            if (characterRED[pos] & characterGREEN[pos]){
+            if (characterRED[charOffsetX][pos] & characterGREEN[charOffsetX][pos]){
                 HBRUSH myBrush = CreateSolidBrush(clrYellow);
                 FillRect(hDC,&LEDRect,myBrush);
                 }
-            else if (characterRED[pos] & !characterGREEN[pos]){
+            else if (characterRED[charOffsetX][pos] & !characterGREEN[charOffsetX][pos]){
                 HBRUSH myBrush = CreateSolidBrush(clrRed);
                 FillRect(hDC,&LEDRect,myBrush);
             }
-            else if (!characterRED[pos] & characterGREEN[pos]){
+            else if (!characterRED[charOffsetX][pos] & characterGREEN[charOffsetX][pos]){
                 HBRUSH myBrush = CreateSolidBrush(clrGreen);
                 FillRect(hDC,&LEDRect,myBrush);
             }
@@ -502,3 +462,21 @@ void printCharacterOnPanel(HDC hDC, unsigned int panelIndex, int charOffsetX, in
         panelX = 10 + charOffsetX*70 + 2;
     }
 }
+
+void byteToBool(int bank){
+int pos = 0;
+int panelBit = 0;
+    for(int character = 0; character < panelLength; character ++){
+        for (int l = 0; l < 7; l++){
+            for (int j = 0; j < 5; j++){
+                characterRED[character][pos+j] = (REDbank[bank][l] & (1 >> j));
+                characterGREEN[character][pos+j] = (GREENbank[bank][l] & (1 >> j));
+            }
+        pos = pos + 5;
+        }
+    pos = 0;
+    }
+
+}
+
+
