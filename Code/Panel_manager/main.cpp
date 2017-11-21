@@ -9,6 +9,8 @@
 #define PANEL_OFFSET_LEFT (120)
 #define PANEL_OFFSET_TOP  (20)
 #define CHAR_WIDTH        (70)
+#define CHAR_WIDTH_LED    (5)
+#define CHAR_HEIGHT_LED   (7)
 #define PANEL_HEIGHT      (98)
 #define MAX_PANEL_LENGTH  (10)
 #define MIN_PANEL_LENGTH  (5)
@@ -40,6 +42,21 @@ UINT panelLength = 5;
 UINT scrollSpeedMillisec = 500;
 DCB dcbSerialParams = { 0 }; // Initializing DCB structure
 COMMTIMEOUTS timeouts = { 0 };
+int panelTextOffset = 0;
+bool sending[4] = {false, false, false, false};
+
+inline void redrawPanels()
+{
+    RECT        panel1 = { PANEL_OFFSET_LEFT, PANEL_OFFSET_TOP, MAX_PANEL_LENGTH*CHAR_WIDTH+PANEL_OFFSET_LEFT, PANEL_HEIGHT+PANEL_OFFSET_TOP };
+    RECT        panel2 = { PANEL_OFFSET_LEFT, 130, MAX_PANEL_LENGTH*CHAR_WIDTH+PANEL_OFFSET_LEFT, PANEL_HEIGHT+130 };
+    RECT        panel3 = { PANEL_OFFSET_LEFT, 240, MAX_PANEL_LENGTH*CHAR_WIDTH+PANEL_OFFSET_LEFT, PANEL_HEIGHT+240 };
+    RECT        panel4 = { PANEL_OFFSET_LEFT, 350, MAX_PANEL_LENGTH*CHAR_WIDTH+PANEL_OFFSET_LEFT, PANEL_HEIGHT+350 };
+    RedrawWindow(hwnd, &panel1, NULL, RDW_INVALIDATE);
+    RedrawWindow(hwnd, &panel2, NULL, RDW_INVALIDATE);
+    RedrawWindow(hwnd, &panel3, NULL, RDW_INVALIDATE);
+    RedrawWindow(hwnd, &panel4, NULL, RDW_INVALIDATE);
+    //UpdateWindow(hwnd);
+}
 
 inline char calculateChecksum(char* inString, int length)
 {
@@ -49,6 +66,20 @@ inline char calculateChecksum(char* inString, int length)
         sum += inString[i];
     }
     return sum&0xFF;
+}
+
+inline bool hasGreen(COLORREF color)
+{
+    if(color == clrGreen || color == clrYellow)
+        return true;
+    return false;
+}
+
+inline bool hasRed(COLORREF color)
+{
+    if(color == clrRed || color == clrYellow)
+        return true;
+    return false;
 }
 
 inline std::string color2String(COLORREF color)
@@ -124,34 +155,34 @@ inline COLORREF negativeMap(COLORREF color)
 int saveProjectFile(char * filename)
 {
     HANDLE hFile = CreateFile((LPCTSTR) filename,
-                GENERIC_WRITE,
-                0,
-                NULL,
-                CREATE_ALWAYS,
-                FILE_ATTRIBUTE_NORMAL,
-                NULL
-    );
+                              GENERIC_WRITE,
+                              0,
+                              NULL,
+                              CREATE_ALWAYS,
+                              FILE_ATTRIBUTE_NORMAL,
+                              NULL
+                             );
     if (hFile == INVALID_HANDLE_VALUE)
         return 0;
     // [length];[character set path];\n#[num panel];[fg_color];[bg_color];[effect];[text\n
 
 
     UINT bytesWritten;
-{
-    char panelData[MAX_PATH+10]; // TODO : define max value
+    {
+        char panelData[MAX_PATH+10]; // TODO : define max value
 
-    sprintf(panelData, "[global]\n\rlength=%d\n\rspeed=%d\n\rcharacter_file=%s\n\r", panelLength, scrollSpeedMillisec, characterSetFile);
-    WriteFile(hFile, panelData, strlen(panelData)+1, (LPDWORD)&bytesWritten, NULL);
-}
+        sprintf(panelData, "[global]\n\rlength=%d\n\rspeed=%d\n\rcharacter_file=%s\n\r", panelLength, scrollSpeedMillisec, characterSetFile);
+        WriteFile(hFile, panelData, strlen(panelData)+1, (LPDWORD)&bytesWritten, NULL);
+    }
 
     char panelData[300]; // TODO : define max value
     for(int i=0; i<4; i++)
     {
         sprintf(panelData, "[panel%d]\n\rfg_color=%s\n\rbg_color=%s\n\reffect=%s\n\rtext=%s\n\r", i,
-                             color2String(panels[i].fg_color).c_str(), \
-                             color2String(panels[i].bg_color).c_str(), \
-                             effect2String(panels[i].effect).c_str(), \
-                             panels[i].panelText);
+                color2String(panels[i].fg_color).c_str(), \
+                color2String(panels[i].bg_color).c_str(), \
+                effect2String(panels[i].effect).c_str(), \
+                panels[i].panelText);
         WriteFile(hFile, panelData, strlen(panelData)+1, (LPDWORD)&bytesWritten, NULL);
     }
     CloseHandle(hFile);
@@ -186,9 +217,11 @@ int loadProjectFile(char * filename)
         GetPrivateProfileString(panelString,"text","",panels[i].panelText,sizeof(panels[i].panelText),filename);
 
     }
-
-    InvalidateRect(hwnd, NULL, TRUE);
-    UpdateWindow(hwnd);
+    SetTimer(hwnd,             // handle to main window
+        IDT_TIMER1,            // timer identifier
+        scrollSpeedMillisec,                 // 10-second interval
+        (TIMERPROC) NULL);     // no timer callback
+    redrawPanels();
     return 1;
 }
 
@@ -198,9 +231,11 @@ int readCharacterBitmap(HANDLE hFile, char charID, BOOL charBMP[7][5])
     DWORD nBytesRead=0;
     BOOL bResult = FALSE;
     char charRead = 0;
-    do{
+    do
+    {
         bResult = ReadFile(hFile, &charRead, 1, &nBytesRead, NULL);
-    } while(charRead != charID && !(bResult = TRUE && nBytesRead == 0)); // NOTE : if the character doesn't exist, nothing will be displayed
+    }
+    while(charRead != charID && !(bResult = TRUE && nBytesRead == 0));   // NOTE : if the character doesn't exist, nothing will be displayed
     SetFilePointer(hFile, 2, NULL, FILE_CURRENT); // got to next line
 
     for(int iLine=0; iLine<7; iLine++)
@@ -220,39 +255,174 @@ int readCharacterBitmap(HANDLE hFile, char charID, BOOL charBMP[7][5])
     return 1;
 }
 
-void printCharacterOnGUIPanel(HDC hDC, unsigned int panelIndex, int charOffsetX, int ledOffsetY, char characterID)
+void character2Serial(char characterID, char outputRed[7], char outputGreen[7], Panel panel)
 {
-    int panelX = PANEL_OFFSET_LEFT + charOffsetX*70 + 2;
-    int panelY = PANEL_OFFSET_TOP + 110*panelIndex + ledOffsetY + 2;
+    BOOL myBMP[7][5] = {{0,},};
+    HANDLE hFile = CreateFile((LPCTSTR) characterSetFile,
+                              GENERIC_READ,
+                              0,
+                              NULL,
+                              OPEN_EXISTING,
+                              FILE_ATTRIBUTE_NORMAL,
+                              NULL
+                             );
+    readCharacterBitmap(hFile, characterID, myBMP);
+    CloseHandle(hFile);
+    for(int y=0; y<7; y++)
+    {
+        for(int x=0; x<5; x++)
+        {
+            outputGreen[y] &= 0xFE;
+            if(hasGreen(panel.fg_color))
+            {
+                if(hasGreen(panel.bg_color))
+                    outputGreen[y] = 1;
+                else
+                    outputGreen[y] |= ((char)myBMP[y][5-x]<<x)&0x01;
+            }
+            else
+            {
+                if(hasGreen(panel.bg_color))
+                    outputGreen[y] |= (~((char)myBMP[y][5-x]<<x))&0x01;
+                else
+                    outputGreen[y] = 0;
+            }
 
-    RECT        LEDRect; //  = { 20, 20, panelLength*74+20, 102+20 }
+            outputRed[y] &= 0xFE;
+            if(hasRed(panel.fg_color))
+            {
+                if(hasRed(panel.bg_color))
+                    outputRed[y] = 1;
+                else
+                    outputRed[y] |= ((char)myBMP[y][5-x]<<x);
+            }
+            else
+            {
+                if(hasRed(panel.bg_color))
+                    outputRed[y] |= (~((char)myBMP[y][5-x]<<x))&0x01;
+                else
+                    outputRed[y] = 0;
+            }
+        }
+    }
+}
+
+bool inline changeBank(int bank)
+{
+    char lpBuffer[2] = {'B',bank};
+
+    DWORD dNoOfBytesWritten = 0;     // No of bytes written to the port
+    WriteFile(hComm,        // Handle to the Serial port
+              lpBuffer,     // Data to be written to the port
+              sizeof(lpBuffer),  //No of bytes to write
+              &dNoOfBytesWritten, //Bytes written
+              NULL);
+
+    char TempChar; //Temporary character used for reading
+    DWORD NoBytesRead;
+    ReadFile( hComm,           //Handle of the Serial port
+              &TempChar,       //Temporary character
+              sizeof(TempChar),//Size of TempChar
+              &NoBytesRead,    //Number of bytes read
+              NULL);
+
+    if(TempChar == 0xAA)
+        return true;
+    else
+        return false;
+}
+
+inline bool sendPanel()
+{
+    char red[7] = {0,};
+    char green[7] = {0,};
+    character2Serial('A', red, green, panels[1]);
+    char lpBufferRed[11] = {'M','r',7,1,1,1,1,1,1,1,  0};
+
+    for(int i=0; i<7; i++)
+    {
+        lpBufferRed[i+3] = red[i];
+    }
+
+    lpBufferRed[10] = calculateChecksum(lpBufferRed, 10);
+    DWORD dNoOfBytesWritten = 0;     // No of bytes written to the port
+
+    WriteFile(hComm,        // Handle to the Serial port
+              lpBufferRed,     // Data to be written to the port
+              sizeof(lpBufferRed),  //No of bytes to write
+              &dNoOfBytesWritten, //Bytes written
+              NULL);
+
+    char TempChar; //Temporary character used for reading
+    DWORD NoBytesRead;
+
+    ReadFile( hComm,           //Handle of the Serial port
+              &TempChar,       //Temporary character
+              sizeof(TempChar),//Size of TempChar
+              &NoBytesRead,    //Number of bytes read
+              NULL);
+
+    char lpBufferGreen[11] = {'M','g',7,1,1,1,1,1,1,1,  0};
+
+    for(int i=0; i<7; i++)
+    {
+        lpBufferGreen[i+3] = red[i];
+    }
+
+    lpBufferGreen[10] = calculateChecksum(lpBufferGreen, 10);
+
+    WriteFile(hComm,        // Handle to the Serial port
+              lpBufferGreen,     // Data to be written to the port
+              sizeof(lpBufferGreen),  //No of bytes to write
+              &dNoOfBytesWritten, //Bytes written
+              NULL);
+
+    ReadFile( hComm,           //Handle of the Serial port
+              &TempChar,       //Temporary character
+              sizeof(TempChar),//Size of TempChar
+              &NoBytesRead,    //Number of bytes read
+              NULL);
+
+    return true;
+}
+
+void printCharacterOnGUIPanel(HDC hDC, unsigned int panelIndex, int charOffsetX, int ledOffsetX, char characterID)
+{
+    if((1+charOffsetX+(double)ledOffsetX/CHAR_WIDTH_LED)>=panelLength)
+        ledOffsetX -= panelLength*CHAR_WIDTH_LED;
+    int panelX = PANEL_OFFSET_LEFT + charOffsetX*70  + ledOffsetX*14 + 2;
+    int panelY = PANEL_OFFSET_TOP + 110*panelIndex + 2;
+
+    RECT LEDRect;
     HBRUSH bgBrush = CreateSolidBrush(panels[panelIndex].bg_color);
     HBRUSH fgBrush = CreateSolidBrush(panels[panelIndex].fg_color);
 
     HANDLE hFile = CreateFile((LPCTSTR) characterSetFile,
-                GENERIC_READ,
-                0,
-                NULL,
-                OPEN_EXISTING,
-                FILE_ATTRIBUTE_NORMAL,
-                NULL
-    );
+                              GENERIC_READ,
+                              0,
+                              NULL,
+                              OPEN_EXISTING,
+                              FILE_ATTRIBUTE_NORMAL,
+                              NULL
+                             );
 
     BOOL myBMP[7][5] = {{0,},};
     readCharacterBitmap(hFile, characterID, myBMP);
     CloseHandle(hFile);
 
-    for(int ledY = 0; ledY < 7; ledY++) {
-        for(int ledX = 0; ledX < 5; ledX++) {
-                LEDRect = { panelX, panelY, panelX+10, panelY+10 };
-                if(myBMP[ledY][ledX])
-                    FillRect(hDC,&LEDRect,fgBrush);
-                else
-                    FillRect(hDC,&LEDRect,bgBrush);
-                panelX += 14;
+    for(int ledY = 0; ledY < 7; ledY++)
+    {
+        for(int ledX = 0; ledX < 5; ledX++)
+        {
+            LEDRect = { panelX, panelY, panelX+10, panelY+10 };
+            if(myBMP[ledY][ledX])
+                FillRect(hDC,&LEDRect,fgBrush);
+            else
+                FillRect(hDC,&LEDRect,bgBrush);
+            panelX = panelX + 14;
         }
         panelY += 14;
-        panelX = PANEL_OFFSET_LEFT + charOffsetX*70 + 2;
+        panelX = PANEL_OFFSET_LEFT + charOffsetX*70 + ledOffsetX*14 + 2;
     }
 }
 
@@ -297,54 +467,53 @@ BOOL CALLBACK DlgPanelSettings(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lP
         case BN_CLICKED:
             switch(LOWORD(wParam))
             {
-                case IDOK_PANEL_SET:
+            case IDOK_PANEL_SET:
+            {
+                if(!strcmp(characterSetFile, "void"))
                 {
-                    if(!strcmp(characterSetFile, "void"))
-                    {
-                        MessageBox(
-                            NULL,
-                            (LPCSTR)"Please load a character set first.",
-                            (LPCSTR)"Problem",
-                            MB_ICONWARNING | MB_OK | MB_DEFBUTTON1
-                        );
-                        EndDialog(hwndDlg,0);
-                    }
-                    int ItemIndex = SendMessage(GetDlgItem(hwndDlg, BG_COLOR_COMBO), (UINT) CB_GETCURSEL,
-                        (WPARAM) 0, (LPARAM) 0);
-                    panels[panel].bg_color = colorsList[ItemIndex];
-
-                    ItemIndex = SendMessage(GetDlgItem(hwndDlg, FG_COLOR_COMBO), (UINT) CB_GETCURSEL,
-                        (WPARAM) 0, (LPARAM) 0);
-                    panels[panel].fg_color = colorsList[ItemIndex];
-
-                    SendMessage(GetDlgItem(hwndDlg, PANEL_TEXT_EDIT), WM_GETTEXT, (WPARAM)MAX_PANEL_LENGTH+1, (LPARAM)panels[panel].panelText);
-
-                    if(IsDlgButtonChecked(hwndDlg, FX_NONE_RAD) == BST_UNCHECKED)
-                    {
-                        if(IsDlgButtonChecked(hwndDlg, FX_LR_RAD) == BST_CHECKED)
-                        {
-                            panels[panel].effect = LR;
-                        }
-                        else if(IsDlgButtonChecked(hwndDlg, FX_RL_RAD) == BST_CHECKED)
-                        {
-                            panels[panel].effect = RL;
-                        }
-                        else if(IsDlgButtonChecked(hwndDlg, FX_NEG_RAD) == BST_CHECKED)
-                        {
-                            panels[panel].effect = NEG;
-                            panels[panel].fg_color = negativeMap(panels[panel].fg_color);
-                            panels[panel].bg_color = negativeMap(panels[panel].bg_color);
-                        }
-                    }
-
-                    InvalidateRect(hwnd, NULL, TRUE);
-                    UpdateWindow(hwnd);
+                    MessageBox(
+                        NULL,
+                        (LPCSTR)"Please load a character set first.",
+                        (LPCSTR)"Problem",
+                        MB_ICONWARNING | MB_OK | MB_DEFBUTTON1
+                    );
                     EndDialog(hwndDlg,0);
-                    break;
                 }
-                case IDCANCEL_PANEL_SET:
-                    EndDialog(hwndDlg,0);
-                    break;
+                int ItemIndex = SendMessage(GetDlgItem(hwndDlg, BG_COLOR_COMBO), (UINT) CB_GETCURSEL,
+                                            (WPARAM) 0, (LPARAM) 0);
+                panels[panel].bg_color = colorsList[ItemIndex];
+
+                ItemIndex = SendMessage(GetDlgItem(hwndDlg, FG_COLOR_COMBO), (UINT) CB_GETCURSEL,
+                                        (WPARAM) 0, (LPARAM) 0);
+                panels[panel].fg_color = colorsList[ItemIndex];
+
+                SendMessage(GetDlgItem(hwndDlg, PANEL_TEXT_EDIT), WM_GETTEXT, (WPARAM)MAX_PANEL_LENGTH+1, (LPARAM)panels[panel].panelText);
+
+                if(IsDlgButtonChecked(hwndDlg, FX_NONE_RAD) == BST_UNCHECKED)
+                {
+                    if(IsDlgButtonChecked(hwndDlg, FX_LR_RAD) == BST_CHECKED)
+                    {
+                        panels[panel].effect = LR;
+                    }
+                    else if(IsDlgButtonChecked(hwndDlg, FX_RL_RAD) == BST_CHECKED)
+                    {
+                        panels[panel].effect = RL;
+                    }
+                    else if(IsDlgButtonChecked(hwndDlg, FX_NEG_RAD) == BST_CHECKED)
+                    {
+                        panels[panel].effect = NEG;
+                        panels[panel].fg_color = negativeMap(panels[panel].fg_color);
+                        panels[panel].bg_color = negativeMap(panels[panel].bg_color);
+                    }
+                }
+
+                redrawPanels();
+                EndDialog(hwndDlg,0);
+                break;
+            }
+            case IDCANCEL_PANEL_SET:
+                EndDialog(hwndDlg,0);
+                break;
             }
             break;
         }
@@ -389,9 +558,12 @@ BOOL CALLBACK DlgPanelConf(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam
             {
                 panelLength = SendMessage(GetDlgItem(hwndDlg, PANEL_LENGTH_SLIDER), TBM_GETPOS, 0, 0);
                 scrollSpeedMillisec = SendMessage(GetDlgItem(hwndDlg, SCROLL_SPEED_SLIDER), TBM_GETPOS, 0, 0);
-
-                InvalidateRect(hwnd, NULL, TRUE);
-                UpdateWindow(hwnd);
+                KillTimer(hwnd, IDT_TIMER1);
+                SetTimer(hwnd,             // handle to main window
+                    IDT_TIMER1,            // timer identifier
+                    scrollSpeedMillisec,                 // 10-second interval
+                    (TIMERPROC) NULL);     // no timer callback
+                redrawPanels();
                 EndDialog(hwndDlg,0);
                 break;
             }
@@ -438,10 +610,10 @@ BOOL CALLBACK DlgSerialConf(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lPara
         SendMessage(GetDlgItem(hwndDlg, STOPBITS_COMBO), CB_SETCURSEL, (WPARAM)0, (LPARAM)0);
 
         SendMessage(GetDlgItem(hwndDlg, BYTESIZE_SPIN), (UINT) UDM_SETRANGE,
-            (WPARAM) 0, MAKELPARAM((WORD) 16, (WORD) 4));
+                    (WPARAM) 0, MAKELPARAM((WORD) 16, (WORD) 4));
 
         SendMessage(GetDlgItem(hwndDlg, TIMEOUT_SPIN), (UINT) UDM_SETRANGE,
-            (WPARAM) 0, MAKELPARAM((WORD) 50, (WORD) 300));
+                    (WPARAM) 0, MAKELPARAM((WORD) 50, (WORD) 300));
 
         SetDlgItemInt(hwndDlg, BYTE_SIZE_ENTRY,8,0);
         SetDlgItemInt(hwndDlg, TIMEOUT_ENTRY,100,0);
@@ -472,32 +644,32 @@ BOOL CALLBACK DlgSerialConf(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lPara
 
                 dcbSerialParams.DCBlength = sizeof(dcbSerialParams);
                 int ItemIndex = SendMessage(GetDlgItem(hwndDlg, COM_COMBO), (UINT) CB_GETCURSEL,
-                        (WPARAM) 0, (LPARAM) 0);
+                                            (WPARAM) 0, (LPARAM) 0);
                 TCHAR  ListItem[256];
                 SendMessage(GetDlgItem(hwndDlg, COM_COMBO), (UINT) CB_GETLBTEXT,
-                    (WPARAM) ItemIndex, (LPARAM) ListItem);
+                            (WPARAM) ItemIndex, (LPARAM) ListItem);
                 strcpy(com_port, ListItem);
 
                 ItemIndex = SendMessage(GetDlgItem(hwndDlg, BAUD_COMBO), (UINT) CB_GETCURSEL,
-                        (WPARAM) 0, (LPARAM) 0);
+                                        (WPARAM) 0, (LPARAM) 0);
                 SendMessage(GetDlgItem(hwndDlg, BAUD_COMBO), (UINT) CB_GETLBTEXT,
-                    (WPARAM) ItemIndex, (LPARAM) ListItem);
+                            (WPARAM) ItemIndex, (LPARAM) ListItem);
                 dcbSerialParams.BaudRate = atoi(ListItem);
 
                 ItemIndex = SendMessage(GetDlgItem(hwndDlg, PAR_COMBO), (UINT) CB_GETCURSEL,
-                        (WPARAM) 0, (LPARAM) 0);
+                                        (WPARAM) 0, (LPARAM) 0);
                 dcbSerialParams.Parity   = ItemIndex;
 
                 ItemIndex = SendMessage(GetDlgItem(hwndDlg, STOPBITS_COMBO), (UINT) CB_GETCURSEL,
-                        (WPARAM) 0, (LPARAM) 0);
+                                        (WPARAM) 0, (LPARAM) 0);
                 dcbSerialParams.StopBits = ItemIndex;
 
                 ItemIndex = SendMessage(GetDlgItem(hwndDlg, BYTESIZE_SPIN), (UINT) UDM_GETPOS,
-                        (WPARAM) 0, (LPARAM) 0);
+                                        (WPARAM) 0, (LPARAM) 0);
                 dcbSerialParams.ByteSize  = ItemIndex;
 
                 ItemIndex = SendMessage(GetDlgItem(hwndDlg, TIMEOUT_SPIN), (UINT) UDM_GETPOS,
-                        (WPARAM) 0, (LPARAM) 0);
+                                        (WPARAM) 0, (LPARAM) 0);
                 EndDialog(hwndDlg,0);
                 break;
             }
@@ -517,287 +689,276 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {
     switch(msg)
     {
-        case WM_CLOSE:
-            DestroyWindow(hwnd);
+    case WM_CLOSE:
+        DestroyWindow(hwnd);
         break;
-        case WM_DESTROY:
-            PostQuitMessage(0);
+    case WM_DESTROY:
+        PostQuitMessage(0);
         break;
+    case WM_TIMER:
+        panelTextOffset = (panelTextOffset+1)%(panelLength*CHAR_WIDTH_LED);
+        redrawPanels();
+        break;
+    case WM_PAINT:
+    {
+        HDC         hDC;
+        PAINTSTRUCT ps;
+        RECT        panel1 = { PANEL_OFFSET_LEFT, PANEL_OFFSET_TOP, panelLength*CHAR_WIDTH+PANEL_OFFSET_LEFT, PANEL_HEIGHT+PANEL_OFFSET_TOP };
+        RECT        panel2 = { PANEL_OFFSET_LEFT, 130, panelLength*CHAR_WIDTH+PANEL_OFFSET_LEFT, PANEL_HEIGHT+130 };
+        RECT        panel3 = { PANEL_OFFSET_LEFT, 240, panelLength*CHAR_WIDTH+PANEL_OFFSET_LEFT, PANEL_HEIGHT+240 };
+        RECT        panel4 = { PANEL_OFFSET_LEFT, 350, panelLength*CHAR_WIDTH+PANEL_OFFSET_LEFT, PANEL_HEIGHT+350 };
+        HBRUSH myBrush = CreateSolidBrush(clrBlack);
 
-        case WM_PAINT:
+        hDC = BeginPaint(hwnd, &ps);
+
+        FillRect(hDC,&panel1,myBrush);
+        FillRect(hDC,&panel2,myBrush);
+        FillRect(hDC,&panel3,myBrush);
+        FillRect(hDC,&panel4,myBrush);
+
+        for(int iPanel = 0; iPanel < 4; iPanel++)
         {
-            HDC         hDC;
-            PAINTSTRUCT ps;
-            RECT        panel1 = { PANEL_OFFSET_LEFT, PANEL_OFFSET_TOP, panelLength*CHAR_WIDTH+PANEL_OFFSET_LEFT, PANEL_HEIGHT+PANEL_OFFSET_TOP };
-            RECT        panel2 = { PANEL_OFFSET_LEFT, 130, panelLength*CHAR_WIDTH+PANEL_OFFSET_LEFT, PANEL_HEIGHT+130 };
-            RECT        panel3 = { PANEL_OFFSET_LEFT, 240, panelLength*CHAR_WIDTH+PANEL_OFFSET_LEFT, PANEL_HEIGHT+240 };
-            RECT        panel4 = { PANEL_OFFSET_LEFT, 350, panelLength*CHAR_WIDTH+PANEL_OFFSET_LEFT, PANEL_HEIGHT+350 };
-            HBRUSH myBrush = CreateSolidBrush(clrBlack);
-
-            hDC = BeginPaint(hwnd, &ps);
-
-            FillRect(hDC,&panel1,myBrush);
-            FillRect(hDC,&panel2,myBrush);
-            FillRect(hDC,&panel3,myBrush);
-            FillRect(hDC,&panel4,myBrush);
-
-            for(int iPanel = 0; iPanel < 4; iPanel++)
+            int iChar=0;
+            char myChar;
+            while(panels[iPanel].panelText[iChar] != '\0' && iChar < MAX_PANEL_LENGTH+1)
             {
-                int iChar=0;
-                char myChar;
-                while(panels[iPanel].panelText[iChar] != '\0' && iChar < MAX_PANEL_LENGTH+1)
-                {
-                    myChar = panels[iPanel].panelText[iChar];
-                    printCharacterOnGUIPanel(hDC, iPanel,iChar,0, myChar);
-                    iChar++;
-                }
+                myChar = panels[iPanel].panelText[iChar];
+                if(panels[iPanel].effect == LR)
+                    printCharacterOnGUIPanel(hDC, iPanel,iChar, panelTextOffset, myChar);
+                else if(panels[iPanel].effect == RL)
+                    printCharacterOnGUIPanel(hDC, iPanel,iChar, panelLength*7 - panelTextOffset, myChar); // TODO : right left
+                else
+                    printCharacterOnGUIPanel(hDC, iPanel,iChar, 0, myChar);
+                iChar++;
             }
-
-            EndPaint(hwnd, &ps);
         }
-        return 0;
-        case WM_COMMAND:
+
+        EndPaint(hwnd, &ps);
+    }
+    return 0;
+    case WM_COMMAND:
+    {
+        if(lParam == 0) /* Menu command */
         {
-            if(lParam == 0) /* Menu command */
+            switch(LOWORD(wParam))
             {
-                switch(LOWORD(wParam))
+            case MENU_CONF_SERIAL:
+                DialogBox(hInst, MAKEINTRESOURCE(IDD_DIALOG_SERIAL_CONF), NULL, (DLGPROC)DlgSerialConf);
+                break;
+            case MENU_SERIAL_CONNECT:
+            {
+                if(hComm != NULL)
+                    CloseHandle(hComm);
+                hComm = CreateFile((LPCSTR)com_port,       // for COM1—COM9 only
+                                   GENERIC_READ | GENERIC_WRITE, // Read/Write
+                                   0,               // No Sharing
+                                   NULL,            // No Security
+                                   OPEN_EXISTING,   // Open existing port only
+                                   0,               // Non Overlapped I/O
+                                   NULL);
+                if (hComm == INVALID_HANDLE_VALUE)
                 {
-                    case MENU_CONF_SERIAL:
+                    int msgboxID = MessageBox(
+                                       NULL,
+                                       (LPCSTR)"Impossible to open COM port\nDo you want to change the settings?",
+                                       (LPCSTR)"Problem",
+                                       MB_ICONWARNING | MB_YESNO | MB_DEFBUTTON2
+                                   );
+                    switch (msgboxID)
+                    {
+                    case IDYES:
                         DialogBox(hInst, MAKEINTRESOURCE(IDD_DIALOG_SERIAL_CONF), NULL, (DLGPROC)DlgSerialConf);
                         break;
-                    case MENU_SERIAL_CONNECT:
-                    {
-                        if(hComm != NULL)
-                            CloseHandle(hComm);
-                        hComm = CreateFile((LPCSTR)com_port,       // for COM1—COM9 only
-                           GENERIC_READ | GENERIC_WRITE, // Read/Write
-                           0,               // No Sharing
-                           NULL,            // No Security
-                           OPEN_EXISTING,   // Open existing port only
-                           0,               // Non Overlapped I/O
-                           NULL);
-                        if (hComm == INVALID_HANDLE_VALUE)
-                        {
-                            int msgboxID = MessageBox(
-                                NULL,
-                                (LPCSTR)"Impossible to open COM port\nDo you want to change the settings?",
-                                (LPCSTR)"Problem",
-                                MB_ICONWARNING | MB_YESNO | MB_DEFBUTTON2
-                            );
-                            switch (msgboxID)
-                            {
-                            case IDYES:
-                                DialogBox(hInst, MAKEINTRESOURCE(IDD_DIALOG_SERIAL_CONF), NULL, (DLGPROC)DlgSerialConf);
-                                break;
-                            case IDNO:
-                                break;
-                            }
-                        }
-                        else
-                            MessageBox(
-                                NULL,
-                                (LPCSTR)"COM Port successfully opened",
-                                (LPCSTR)"Success",
-                                MB_ICONINFORMATION | MB_OK | MB_DEFBUTTON1
-                            );
-
-                        SetCommState(hComm, &dcbSerialParams);
-                        SetCommTimeouts(hComm, &timeouts);
-                        break;
-                    }
-                    case MENU_CONF_PANEL:
-                        DialogBox(hInst, MAKEINTRESOURCE(IDD_DIALOG_PANEL_CONF), NULL, (DLGPROC)DlgPanelConf);
-                        break;
-                    case MENU_FILE_LOAD_PROJECT:
-                    {
-                        char filename[ MAX_PATH ];
-                        OPENFILENAME ofn;
-                          ZeroMemory( &filename, sizeof( filename ) );
-                          ZeroMemory( &ofn,      sizeof( ofn ) );
-                          ofn.lStructSize  = sizeof( ofn );
-                          ofn.lpstrDefExt = ".pmp";
-                          ofn.hwndOwner    = NULL;  // If you have a window to center over, put its HANDLE here
-                          ofn.lpstrFilter  = "PM Project Files\0*.pmp\0Any File\0*.*\0";
-                          ofn.lpstrFile    = filename;
-                          ofn.nMaxFile     = MAX_PATH;
-                          ofn.lpstrTitle   = "Please select a file...";
-                          ofn.Flags        = OFN_DONTADDTORECENT | OFN_FILEMUSTEXIST;
-
-                        if (GetOpenFileName( &ofn ))
-                        {
-                            if(!loadProjectFile(filename))
-                                MessageBox(
-                                    NULL,
-                                    (LPCSTR)"Impossible to open the file.\nPlease refer to the log file.",
-                                    (LPCSTR)"Problem",
-                                    MB_ICONWARNING | MB_OK | MB_DEFBUTTON1
-                                );
-                        }
-                        else
-                        {
-                            MessageBox(
-                                NULL,
-                                (LPCSTR)"Impossible to open the file.\nPlease refer to the log file.",
-                                (LPCSTR)"Problem",
-                                MB_ICONWARNING | MB_OK | MB_DEFBUTTON1
-                            );
-                            // TODO : write log
-                        }
-                        break;
-                    }
-                    case MENU_FILE_SAVE_PROJECT:
-                    {
-                        char filename[ MAX_PATH ];
-                        OPENFILENAME ofn;
-                          ZeroMemory( &filename, sizeof( filename ) );
-                          ZeroMemory( &ofn,      sizeof( ofn ) );
-                          ofn.lStructSize  = sizeof( ofn );
-                          ofn.hwndOwner    = NULL;  // If you have a window to center over, put its HANDLE here
-                          ofn.lpstrDefExt = ".pmp";
-                          ofn.lpstrFilter  = "PM Project Files\0*.pmp\0Any File\0*.*\0";
-                          ofn.lpstrFile    = filename;
-                          ofn.nMaxFile     = MAX_PATH;
-                          ofn.lpstrTitle   = "Please select a file...";
-                          ofn.Flags        = OFN_DONTADDTORECENT | OFN_PATHMUSTEXIST;
-
-                        if (GetSaveFileName( &ofn ))
-                        {
-                            if(!saveProjectFile(filename))
-                                MessageBox(
-                                    NULL,
-                                    (LPCSTR)"Impossible to save the file.\nPlease refer to the log file.",
-                                    (LPCSTR)"Problem",
-                                    MB_ICONWARNING | MB_OK | MB_DEFBUTTON1
-                                );
-                        }
-                        else
-                        {
-                            MessageBox(
-                                NULL,
-                                (LPCSTR)"Impossible to save the file.\nPlease refer to the log file.",
-                                (LPCSTR)"Problem",
-                                MB_ICONWARNING | MB_OK | MB_DEFBUTTON1
-                            );
-                            // TODO : write log
-                        }
-                        break;
-                    }
-                    case MENU_FILE_LOAD_CHAR_SET:
-                    {
-                        char filename[ MAX_PATH ];
-                        OPENFILENAME ofn;
-                          ZeroMemory( &filename, sizeof( filename ) );
-                          ZeroMemory( &ofn,      sizeof( ofn ) );
-                          ofn.lStructSize  = sizeof( ofn );
-                          ofn.lpstrDefExt = ".pcs";
-                          ofn.hwndOwner    = NULL;  // If you have a window to center over, put its HANDLE here
-                          ofn.lpstrFilter  = "Panel Character Sets\0*.pcs\0Any File\0*.*\0";
-                          ofn.lpstrFile    = filename;
-                          ofn.nMaxFile     = MAX_PATH;
-                          ofn.lpstrTitle   = "Please select a character set...";
-                          ofn.Flags        = OFN_DONTADDTORECENT | OFN_FILEMUSTEXIST;
-
-                        if (GetOpenFileName( &ofn ))
-                        {
-                            strcpy(characterSetFile, filename);
-                        }
-                        else
-                        {
-                            MessageBox(
-                                NULL,
-                                (LPCSTR)"Impossible to save the file.\nPlease refer to the log file.",
-                                (LPCSTR)"Problem",
-                                MB_ICONWARNING | MB_OK | MB_DEFBUTTON1
-                            );
-                            // TODO : write log
-                        }
+                    case IDNO:
                         break;
                     }
                 }
+                else
+                    MessageBox(
+                        NULL,
+                        (LPCSTR)"COM Port successfully opened",
+                        (LPCSTR)"Success",
+                        MB_ICONINFORMATION | MB_OK | MB_DEFBUTTON1
+                    );
+
+                SetCommState(hComm, &dcbSerialParams);
+                SetCommTimeouts(hComm, &timeouts);
+                break;
             }
-            else /* control commands */
-            { /* HIWORD contains BN_CLICKED, etc */
-                switch(HIWORD(wParam))
+            case MENU_CONF_PANEL:
+                DialogBox(hInst, MAKEINTRESOURCE(IDD_DIALOG_PANEL_CONF), NULL, (DLGPROC)DlgPanelConf);
+                break;
+            case MENU_FILE_QUIT:
+                DestroyWindow(hwnd);
+                break;
+            case MENU_FILE_LOAD_PROJECT:
+            {
+                char filename[ MAX_PATH ];
+                OPENFILENAME ofn;
+                ZeroMemory( &filename, sizeof( filename ) );
+                ZeroMemory( &ofn,      sizeof( ofn ) );
+                ofn.lStructSize  = sizeof( ofn );
+                ofn.lpstrDefExt = ".pmp";
+                ofn.hwndOwner    = NULL;  // If you have a window to center over, put its HANDLE here
+                ofn.lpstrFilter  = "PM Project Files\0*.pmp\0Any File\0*.*\0";
+                ofn.lpstrFile    = filename;
+                ofn.nMaxFile     = MAX_PATH;
+                ofn.lpstrTitle   = "Please select a file...";
+                ofn.Flags        = OFN_FILEMUSTEXIST;
+
+                if (GetOpenFileName( &ofn ))
                 {
-                    case BN_CLICKED:
-                        switch(LOWORD(wParam))
-                        {
-                            case MAIN_CONF1_BUTTON:
-                                DialogBoxParam(hInst, MAKEINTRESOURCE(IDD_DIALOG_PANEL_SETTINGS),NULL,(DLGPROC)DlgPanelSettings,
-                                  MAKELPARAM((WORD)0,(WORD)0)
-                                );
-                                break;
-                            case MAIN_CONF2_BUTTON:
-                                DialogBoxParam(hInst, MAKEINTRESOURCE(IDD_DIALOG_PANEL_SETTINGS),NULL,(DLGPROC)DlgPanelSettings,
-                                  MAKELPARAM((WORD)0,(WORD)1)
-                                );
-                                break;
-                            case MAIN_CONF3_BUTTON:
-                                DialogBoxParam(hInst, MAKEINTRESOURCE(IDD_DIALOG_PANEL_SETTINGS),NULL,(DLGPROC)DlgPanelSettings,
-                                  MAKELPARAM((WORD)0,(WORD)2)
-                                );
-                                break;
-                            case MAIN_CONF4_BUTTON:
-                                DialogBoxParam(hInst, MAKEINTRESOURCE(IDD_DIALOG_PANEL_SETTINGS),NULL,(DLGPROC)DlgPanelSettings,
-                                  MAKELPARAM((WORD)0,(WORD)3)
-                                );
-                                break;
-                            case MAIN_SEND1_BUTTON:
-                            {
-                                char lpBuffer[18] = {'M','r',14,1,2,3,4,5,6,7,8,9,10,11,12,13,14,0};
-                                lpBuffer[18] = calculateChecksum(lpBuffer, 17);
-                                DWORD dNoOfBytesWritten = 0;     // No of bytes written to the port
-
-                                WriteFile(hComm,        // Handle to the Serial port
-                                       lpBuffer,     // Data to be written to the port
-                                       sizeof(lpBuffer),  //No of bytes to write
-                                       &dNoOfBytesWritten, //Bytes written
-                                       NULL);
-
-                                char TempChar; //Temporary character used for reading
-                                char SerialBuffer[256];//Buffer for storing Rxed Data
-                                DWORD NoBytesRead;
-                                int i = 0;
-
-                                do {
-                                   ReadFile( hComm,           //Handle of the Serial port
-                                             &TempChar,       //Temporary character
-                                             sizeof(TempChar),//Size of TempChar
-                                             &NoBytesRead,    //Number of bytes read
-                                             NULL);
-
-                                   SerialBuffer[i] = TempChar;// Store Tempchar into buffer
-                                   i++;
-                                }while (NoBytesRead > 0);
-                                printf("%s", SerialBuffer);
-                                break;
-                            }
-                            case MAIN_SEND2_BUTTON:
-                            {
-                                break;
-                            }
-                            case MAIN_SEND3_BUTTON:
-                            {
-                                break;
-                            }
-                            case MAIN_SEND4_BUTTON:
-                            {
-                                break;
-                            }
-                        }
-                        break;
+                    if(!loadProjectFile(filename))
+                        MessageBox(
+                            NULL,
+                            (LPCSTR)"Impossible to open the file.\nPlease refer to the log file.",
+                            (LPCSTR)"Problem",
+                            MB_ICONWARNING | MB_OK | MB_DEFBUTTON1
+                        );
                 }
+                else
+                {
+                    MessageBox(
+                        NULL,
+                        (LPCSTR)"Impossible to open the file.\nPlease refer to the log file.",
+                        (LPCSTR)"Problem",
+                        MB_ICONWARNING | MB_OK | MB_DEFBUTTON1
+                    );
+                    // TODO : write log
+                }
+                break;
             }
-            return 0;
+            case MENU_FILE_SAVE_PROJECT:
+            {
+                char filename[ MAX_PATH ];
+                OPENFILENAME ofn;
+                ZeroMemory( &filename, sizeof( filename ) );
+                ZeroMemory( &ofn,      sizeof( ofn ) );
+                ofn.lStructSize  = sizeof( ofn );
+                ofn.hwndOwner    = NULL;  // If you have a window to center over, put its HANDLE here
+                ofn.lpstrDefExt = ".pmp";
+                ofn.lpstrFilter  = "PM Project Files\0*.pmp\0Any File\0*.*\0";
+                ofn.lpstrFile    = filename;
+                ofn.nMaxFile     = MAX_PATH;
+                ofn.lpstrTitle   = "Please select a file...";
+                ofn.Flags        = OFN_PATHMUSTEXIST;
+
+                if (GetSaveFileName( &ofn ))
+                {
+                    if(!saveProjectFile(filename))
+                        MessageBox(
+                            NULL,
+                            (LPCSTR)"Impossible to save the file.\nPlease refer to the log file.",
+                            (LPCSTR)"Problem",
+                            MB_ICONWARNING | MB_OK | MB_DEFBUTTON1
+                        );
+                }
+                else
+                {
+                    MessageBox(
+                        NULL,
+                        (LPCSTR)"Impossible to save the file.\nPlease refer to the log file.",
+                        (LPCSTR)"Problem",
+                        MB_ICONWARNING | MB_OK | MB_DEFBUTTON1
+                    );
+                    // TODO : write log
+                }
+                break;
+            }
+            case MENU_FILE_LOAD_CHAR_SET:
+            {
+                char filename[ MAX_PATH ];
+                OPENFILENAME ofn;
+                ZeroMemory( &filename, sizeof( filename ) );
+                ZeroMemory( &ofn,      sizeof( ofn ) );
+                ofn.lStructSize  = sizeof( ofn );
+                ofn.lpstrDefExt = ".pcs";
+                ofn.hwndOwner    = NULL;  // If you have a window to center over, put its HANDLE here
+                ofn.lpstrFilter  = "Panel Character Sets\0*.pcs\0Any File\0*.*\0";
+                ofn.lpstrFile    = filename;
+                ofn.nMaxFile     = MAX_PATH;
+                ofn.lpstrTitle   = "Please select a character set...";
+                ofn.Flags        = OFN_FILEMUSTEXIST;
+
+                if (GetOpenFileName( &ofn ))
+                {
+                    strcpy(characterSetFile, filename);
+                }
+                else
+                {
+                    MessageBox(
+                        NULL,
+                        (LPCSTR)"Impossible to save the file.\nPlease refer to the log file.",
+                        (LPCSTR)"Problem",
+                        MB_ICONWARNING | MB_OK | MB_DEFBUTTON1
+                    );
+                    // TODO : write log
+                }
+                break;
+            }
+            }
         }
-        default:
-            return DefWindowProc(hwnd, msg, wParam, lParam);
+        else /* control commands */
+        {
+            /* HIWORD contains BN_CLICKED, etc */
+            switch(HIWORD(wParam))
+            {
+            case BN_CLICKED:
+                switch(LOWORD(wParam))
+                {
+                case MAIN_CONF1_BUTTON:
+                    DialogBoxParam(hInst, MAKEINTRESOURCE(IDD_DIALOG_PANEL_SETTINGS),NULL,(DLGPROC)DlgPanelSettings,
+                                   MAKELPARAM((WORD)0,(WORD)0)
+                                  );
+                    break;
+                case MAIN_CONF2_BUTTON:
+                    DialogBoxParam(hInst, MAKEINTRESOURCE(IDD_DIALOG_PANEL_SETTINGS),NULL,(DLGPROC)DlgPanelSettings,
+                                   MAKELPARAM((WORD)0,(WORD)1)
+                                  );
+                    break;
+                case MAIN_CONF3_BUTTON:
+                    DialogBoxParam(hInst, MAKEINTRESOURCE(IDD_DIALOG_PANEL_SETTINGS),NULL,(DLGPROC)DlgPanelSettings,
+                                   MAKELPARAM((WORD)0,(WORD)2)
+                                  );
+                    break;
+                case MAIN_CONF4_BUTTON:
+                    DialogBoxParam(hInst, MAKEINTRESOURCE(IDD_DIALOG_PANEL_SETTINGS),NULL,(DLGPROC)DlgPanelSettings,
+                                   MAKELPARAM((WORD)0,(WORD)3)
+                                  );
+                    break;
+                case MAIN_SEND1_BUTTON:
+                {
+                    sendPanel();
+                    changeBank(0);
+                    break;
+                }
+                case MAIN_SEND2_BUTTON:
+                {
+                    changeBank(1);
+                    break;
+                }
+                case MAIN_SEND3_BUTTON:
+                {
+                    break;
+                }
+                case MAIN_SEND4_BUTTON:
+                {
+                    break;
+                }
+                }
+                break;
+            }
+        }
+        return 0;
+    }
+    default:
+        return DefWindowProc(hwnd, msg, wParam, lParam);
     }
     return 0;
 }
 
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
-    LPSTR lpCmdLine, int nCmdShow)
+                   LPSTR lpCmdLine, int nCmdShow)
 {
     WNDCLASSEX wc;
     MSG Msg;
@@ -819,47 +980,51 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
     if(!RegisterClassEx(&wc))
     {
         MessageBox(NULL, "Window Registration Failed!", "Error!",
-            MB_ICONEXCLAMATION | MB_OK);
+                   MB_ICONEXCLAMATION | MB_OK);
         return 0;
     }
 
     hwnd = CreateWindowEx(
-        WS_EX_CLIENTEDGE,
-        g_szClassName,
-        "Panel Manager",  /*window name*/
-        WS_OVERLAPPEDWINDOW,
-        CW_USEDEFAULT, CW_USEDEFAULT, 800, 600, /*the size of the window*/
-        NULL, NULL, hInstance, NULL);
+               WS_EX_CLIENTEDGE,
+               g_szClassName,
+               "Panel Manager",  /*window name*/
+               WS_OVERLAPPEDWINDOW,
+               CW_USEDEFAULT, CW_USEDEFAULT, 800, 600, /*the size of the window*/
+               NULL, NULL, hInstance, NULL);
 
     if(hwnd == NULL)
     {
         MessageBox(NULL, "Window Creation Failed!", "Error!",
-            MB_ICONEXCLAMATION | MB_OK);
+                   MB_ICONEXCLAMATION | MB_OK);
         return 0;
     }
 
     CreateWindow("BUTTON","Configure",WS_TABSTOP | WS_VISIBLE | WS_CHILD | BS_DEFPUSHBUTTON,20,20,80,30,
-                                       hwnd,(HMENU)MAIN_CONF1_BUTTON,(HINSTANCE)GetWindowLong(hwnd, GWL_HINSTANCE),NULL);
+                 hwnd,(HMENU)MAIN_CONF1_BUTTON,(HINSTANCE)GetWindowLong(hwnd, GWL_HINSTANCE),NULL);
     CreateWindow("BUTTON","Configure",WS_TABSTOP | WS_VISIBLE | WS_CHILD | BS_DEFPUSHBUTTON,20,130,80,30,
-                                       hwnd,(HMENU)MAIN_CONF2_BUTTON,(HINSTANCE)GetWindowLong(hwnd, GWL_HINSTANCE),NULL);
+                 hwnd,(HMENU)MAIN_CONF2_BUTTON,(HINSTANCE)GetWindowLong(hwnd, GWL_HINSTANCE),NULL);
     CreateWindow("BUTTON","Configure",WS_TABSTOP | WS_VISIBLE | WS_CHILD | BS_DEFPUSHBUTTON,20,240,80,30,
-                                       hwnd,(HMENU)MAIN_CONF3_BUTTON,(HINSTANCE)GetWindowLong(hwnd, GWL_HINSTANCE),NULL);
+                 hwnd,(HMENU)MAIN_CONF3_BUTTON,(HINSTANCE)GetWindowLong(hwnd, GWL_HINSTANCE),NULL);
     CreateWindow("BUTTON","Configure",WS_TABSTOP | WS_VISIBLE | WS_CHILD | BS_DEFPUSHBUTTON,20,350,80,30,
-                                       hwnd,(HMENU)MAIN_CONF4_BUTTON,(HINSTANCE)GetWindowLong(hwnd, GWL_HINSTANCE),NULL);
+                 hwnd,(HMENU)MAIN_CONF4_BUTTON,(HINSTANCE)GetWindowLong(hwnd, GWL_HINSTANCE),NULL);
     CreateWindow("BUTTON","Send",WS_TABSTOP | WS_VISIBLE | WS_CHILD | BS_DEFPUSHBUTTON,20,60,80,30,
-                                       hwnd,(HMENU)MAIN_SEND1_BUTTON,(HINSTANCE)GetWindowLong(hwnd, GWL_HINSTANCE),NULL);
+                 hwnd,(HMENU)MAIN_SEND1_BUTTON,(HINSTANCE)GetWindowLong(hwnd, GWL_HINSTANCE),NULL);
     CreateWindow("BUTTON","Send",WS_TABSTOP | WS_VISIBLE | WS_CHILD | BS_DEFPUSHBUTTON,20,170,80,30,
-                                       hwnd,(HMENU)MAIN_SEND2_BUTTON,(HINSTANCE)GetWindowLong(hwnd, GWL_HINSTANCE),NULL);
+                 hwnd,(HMENU)MAIN_SEND2_BUTTON,(HINSTANCE)GetWindowLong(hwnd, GWL_HINSTANCE),NULL);
     CreateWindow("BUTTON","Send",WS_TABSTOP | WS_VISIBLE | WS_CHILD | BS_DEFPUSHBUTTON,20,280,80,30,
-                                       hwnd,(HMENU)MAIN_SEND3_BUTTON,(HINSTANCE)GetWindowLong(hwnd, GWL_HINSTANCE),NULL);
+                 hwnd,(HMENU)MAIN_SEND3_BUTTON,(HINSTANCE)GetWindowLong(hwnd, GWL_HINSTANCE),NULL);
     CreateWindow("BUTTON","Send",WS_TABSTOP | WS_VISIBLE | WS_CHILD | BS_DEFPUSHBUTTON,20,390,80,30,
-                                       hwnd,(HMENU)MAIN_SEND4_BUTTON,(HINSTANCE)GetWindowLong(hwnd, GWL_HINSTANCE),NULL);
+                 hwnd,(HMENU)MAIN_SEND4_BUTTON,(HINSTANCE)GetWindowLong(hwnd, GWL_HINSTANCE),NULL);
     ShowWindow(hwnd, nCmdShow);  /*needs to be done to create a windows*/
     UpdateWindow(hwnd);          /*should be done every time a "widget" is added*/
-
+    SetTimer(hwnd,             // handle to main window
+        IDT_TIMER1,            // timer identifier
+        scrollSpeedMillisec,                 // 10-second interval
+        (TIMERPROC) NULL);     // no timer callback
     // Step 3: The Message Loop
     while(GetMessage(&Msg, NULL, 0, 0) > 0)
-    {   /*this part of the code is like a while loop that runs everytime*/
+    {
+        /*this part of the code is like a while loop that runs everytime*/
         TranslateMessage(&Msg);
         DispatchMessage(&Msg);
     }

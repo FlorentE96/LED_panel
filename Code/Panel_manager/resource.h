@@ -6,6 +6,7 @@
 #define IDD_DIALOG_PANEL_CONF                   101
 #define IDD_DIALOG_PANEL_SETTINGS               102
 #define IDR_MENU1                               103
+#define IDT_TIMER1                              104
 #define MENU_FILE_SAVE_PROJECT                  30000
 #define MENU_FILE_LOAD_PROJECT                  30001
 #define MENU_FILE_LOAD_CHAR_SET                 30002
