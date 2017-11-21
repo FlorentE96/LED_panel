@@ -18,13 +18,13 @@ HWND hwnd;
 int panelLength = 8;
 DWORD dwEventMask;
 char SerialBuffer[255];//Buffer for storing Rxed Data
-COMMTIMEOUTS timeouts = { 0 };
+COMMTIMEOUTS timeouts;
 char REDbank[2][70];
 char GREENbank[2][70];
 bool characterRED[10][35];
 bool characterGREEN[10][35];
 int i = 0;
-
+HWND global_hwnd;
 //functions
 BOOL CALLBACK DlgPanelConf(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam);
 BOOL CALLBACK DlgSerialConf(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam);
@@ -34,43 +34,61 @@ void storeRXmsg(int bank, bool LEDcolor, char msgSize);
 void byteToBool(int bank);
 void serialTreat(void);
 
+inline char calculateChecksum(char* inString, int length){
+    int sum=0;
+    for(int u=0; u<length; u++)
+    {
+        sum += inString[u];
+    }
+    return sum&0xFF;
+}
 
 void CALLBACK func1(){
 DWORD NBytesRead;
+char tempChar;
+COMSTAT commstat;
+DWORD dwErrors = 0;
 if(hComm == INVALID_HANDLE_VALUE){
     printf("serial receive error");
+    return;
 }
+memset(&commstat, 0, sizeof(commstat));
+ClearCommError(hComm, &dwErrors,  &commstat);
 
-ReadFile( hComm,           //Handle of the Serial port
-         &SerialBuffer[i],       //Temporary character
-         1,//Size of TempChar
-         &NBytesRead,    //Number of bytes read
-         NULL);
-    printf("%s",&SerialBuffer[i]);
-    i++;
-if (SerialBuffer[i-1] == 13){
-        serialTreat();
+    if (commstat.cbInQue) {
+        ReadFile( hComm, &tempChar, 1, &NBytesRead,NULL);
+        SerialBuffer[i] = tempChar;
+        printf("%s",&SerialBuffer[i]);
+        i++;
+        if (SerialBuffer[i-1] == 13){
+            //if (calculateChecksum(SerialBuffer, i-3) == SerialBuffer[i-2]){
+                //now it should serial TX that the checksum worked
+                char lpBuffer = 0xaa;
+                DWORD dNoOfBytesWritten = 0;    // No of bytes written to the port
+
+                WriteFile(hComm,                // Handle to the Serial port
+                          (LPCVOID)lpBuffer,             // Data to be written to the port
+                          sizeof(lpBuffer),     // No of bytes to write
+                          &dNoOfBytesWritten,   // Bytes written
+                          NULL);
+
+                serialTreat();
+//            } else {
+//                //here it should serial TX that the checksum was wrong
+//                char lpBuffer = 0xff;
+//                DWORD dNoOfBytesWritten = 0;    // No of bytes written to the port
+//
+//                WriteFile(hComm,                // Handle to the Serial port
+//                          (LPCVOID)lpBuffer,    // Data to be written to the port
+//                          sizeof(lpBuffer),     //No of bytes to write
+//                          &dNoOfBytesWritten,   //Bytes written
+//                          NULL);
+//            }
+        }
     }
 }
 
-void CALLBACK updDsp(void){
-    HDC         hDC;
-    PAINTSTRUCT ps;
-    RECT        panel1 = { 10, 20+30, panelLength*70+10, 98+20+30 };
-
-    HBRUSH myBrush = CreateSolidBrush(clrBlack);
-
-    hDC = BeginPaint(hwnd, &ps);
-
-    FillRect(hDC,&panel1,myBrush);
-    char g = 0;
-    while (g < panelLength){
-    printCharacterOnPanel(hDC, 0, g, 0);
-    g++;
-    }
-    EndPaint(hwnd, &ps);
-}
-
+void dispUpd(void);
 
 void serialTreat(void){
     printf("\nmensagem totalmente recebida");
@@ -80,7 +98,6 @@ void serialTreat(void){
             case 'r': /*bank 0, red*/
                 printf("\nmsg stored at R0");
                 storeRXmsg(0, 1, SerialBuffer[2]);
-
                 break;
             case 'R': /*bank 1, red*/
                 storeRXmsg(1, 1, SerialBuffer[2]);
@@ -100,7 +117,7 @@ void serialTreat(void){
         if(SerialBuffer[1]=='0'){
             printf("\ncalled b0");
             byteToBool(0);
-            //convert current bank message to bool arry and store it at characterRED and characterGREEN
+            //convert current bank message to bool array and store it at characterRED and characterGREEN
         }
         else{
             printf("\ncalled b1");
@@ -109,10 +126,12 @@ void serialTreat(void){
 
     }
 memset(SerialBuffer, 0, 255);
+dispUpd();
 }
 
 LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {   /*this part of the code process the "events" since it's a event oriented language*/
+    global_hwnd = hwnd;
     switch(msg)
     {
         case WM_CLOSE:
@@ -123,6 +142,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
         break;
         case WM_PAINT:
         {
+            printf("\nWM PAINT");
             HDC         hDC;
             PAINTSTRUCT ps;
             RECT        panel1 = { 10, 20+30, panelLength*70+10, 98+20+30 };
@@ -141,6 +161,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
         break;
         }
         case WM_COMMAND:{
+            printf("\nWM command");
             if (HIWORD(wParam) == 1 || HIWORD(wParam) == 0){
                 switch(LOWORD(wParam)){
                     case MENU_CLOSE_BN:
@@ -161,6 +182,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 
                 }
             }
+        return 1;
         break;
         }
         default:
@@ -281,13 +303,6 @@ BOOL CALLBACK DlgSerialConf(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lPara
             {
             case IDOK_PORT:
             {
-
-                timeouts.ReadIntervalTimeout         = 50; // in milliseconds
-                timeouts.ReadTotalTimeoutConstant    = 50; // in milliseconds
-                timeouts.ReadTotalTimeoutMultiplier  = 10; // in milliseconds
-                timeouts.WriteTotalTimeoutConstant   = 50; // in milliseconds
-                timeouts.WriteTotalTimeoutMultiplier = 10; // in milliseconds
-
                 dcbSerialParams.DCBlength = sizeof(dcbSerialParams);
                 int ItemIndex = SendMessage(GetDlgItem(hwndDlg, COM_COMBO), (UINT) CB_GETCURSEL,
                         (WPARAM) 0, (LPARAM) 0);
@@ -424,9 +439,17 @@ int openSerial(void) {
         );
 
     }
-    SetTimer(hwnd, TIMER1, 5, (TIMERPROC)func1);
+    timeouts.ReadIntervalTimeout = 3;
+    timeouts.ReadTotalTimeoutMultiplier = 3;
+    timeouts.ReadTotalTimeoutConstant = 2;
+    timeouts.WriteTotalTimeoutMultiplier = 3;
+    timeouts.WriteTotalTimeoutConstant = 2;
+    SetTimer(global_hwnd, TIMER1, 5, (TIMERPROC)func1);
     SetCommState(hComm, &dcbSerialParams);
-    SetCommTimeouts(hComm, &timeouts);
+    if (!SetCommTimeouts(hComm, &timeouts)){
+        printf("set timeout failed");
+    }
+
     printf("\nconnected");
     return 1;
 }
@@ -464,18 +487,20 @@ printf("\nprinted on disp");
 
 void byteToBool(int bank){
 int pos = 0;
-int panelBit = 0;
     for(int character = 0; character < panelLength; character ++){
         for (int l = 0; l < 7; l++){
             for (int j = 0; j < 5; j++){
-                characterRED[character][pos + j] = (REDbank[bank][l] & (1 >> j));
-                characterGREEN[character][pos + j] = (GREENbank[bank][l] & (1 >> j));
+                characterRED[character][pos + j] = (REDbank[bank][l + character * 7 ] & (1 << j));
+                printf("%d",characterRED[character][pos + j]);
+                characterGREEN[character][pos + j] = (GREENbank[bank][l + character * 7 ] & (1 << j));
             }
         pos = pos + 5;
         }
     pos = 0;
     }
-updDsp();
 }
 
-
+void dispUpd(void){
+    InvalidateRect(hwnd, NULL, TRUE);
+    UpdateWindow(hwnd);
+}
