@@ -34,6 +34,14 @@ void storeRXmsg(int bank, bool LEDcolor, char msgSize);
 void byteToBool(int bank);
 void serialTreat(void);
 
+inline char calculateChecksum(char* inString, int length){
+    int sum=0;
+    for(int u=0; u<length; u++)
+    {
+        sum += inString[u];
+    }
+    return sum&0xFF;
+}
 
 void CALLBACK func1(){
 DWORD NBytesRead;
@@ -47,13 +55,35 @@ if(hComm == INVALID_HANDLE_VALUE){
 memset(&commstat, 0, sizeof(commstat));
 ClearCommError(hComm, &dwErrors,  &commstat);
     if (commstat.cbInQue) {
-    ReadFile( hComm, &tempChar, 1, &NBytesRead,NULL);
-    SerialBuffer[i] = tempChar;
-    printf("%s",&SerialBuffer[i]);
-    i++;
+        ReadFile( hComm, &tempChar, 1, &NBytesRead,NULL);
+        SerialBuffer[i] = tempChar;
+        printf("%s",&SerialBuffer[i]);
+        i++;
         if (SerialBuffer[i-1] == 13){
+            //if (calculateChecksum(SerialBuffer, i-3) == SerialBuffer[i-2]){
+                //now it should serial TX that the checksum worked
+                char lpBuffer = 0xaa;
+                DWORD dNoOfBytesWritten = 0;    // No of bytes written to the port
+
+                WriteFile(hComm,                // Handle to the Serial port
+                          (LPCVOID)lpBuffer,             // Data to be written to the port
+                          sizeof(lpBuffer),     // No of bytes to write
+                          &dNoOfBytesWritten,   // Bytes written
+                          NULL);
+
                 serialTreat();
-            }
+//            } else {
+//                //here it should serial TX that the checksum was wrong
+//                char lpBuffer = 0xff;
+//                DWORD dNoOfBytesWritten = 0;    // No of bytes written to the port
+//
+//                WriteFile(hComm,                // Handle to the Serial port
+//                          (LPCVOID)lpBuffer,    // Data to be written to the port
+//                          sizeof(lpBuffer),     //No of bytes to write
+//                          &dNoOfBytesWritten,   //Bytes written
+//                          NULL);
+//            }
+        }
     }
 }
 
