@@ -16,6 +16,7 @@
 #define MIN_PANEL_LENGTH  (5)
 #define MAX_SCROLL_SPEED  (1500)
 #define MIN_SCROLL_SPEED  (50)
+#define PANEL_NONE        (-1)
 
 typedef enum Efect {NONE, LR, RL, NEG} Effect;
 typedef struct Panel
@@ -43,7 +44,8 @@ UINT scrollSpeedMillisec = 500;
 DCB dcbSerialParams = { 0 }; // Initializing DCB structure
 COMMTIMEOUTS timeouts = { 0 };
 int panelTextOffset = 0;
-bool sending[4] = {false, false, false, false};
+int panelSendingIndex = PANEL_NONE;
+int bankFlipFlop = 0;
 
 inline void redrawPanels()
 {
@@ -332,7 +334,7 @@ bool inline changeBank(int bank)
         return false;
 }
 
-inline bool sendPanelText(unsigned int panelIndex, int ledOffsetX, char text[], int textLength, int bank)
+inline bool sendPanelText(unsigned int panelIndex, int ledOffsetX, char text[], int bank)
 {
     char red[7] = {0,};
     char green[7] = {0,};
@@ -341,7 +343,7 @@ inline bool sendPanelText(unsigned int panelIndex, int ledOffsetX, char text[], 
     lpBufferRed = new char[panelLength*7+4]; // 'M', 'r', length, chksm
     lpBufferRed[0] = 'M';
     lpBufferRed[1] = bank?'R':'r';
-    lpBufferRed[2] = textLength*7;
+    lpBufferRed[2] = panelLength*7;
 
     char *lpBufferGreen;
     lpBufferGreen = new char[panelLength*7+4]; // 'M', 'r', length, chksm
@@ -389,8 +391,10 @@ inline bool sendPanelText(unsigned int panelIndex, int ledOffsetX, char text[], 
     }
 
     lpBufferRed[panelLength*7+3] = calculateChecksum(lpBufferRed, panelLength+3);
+    lpBufferGreen[panelLength*7+3] = calculateChecksum(lpBufferGreen, panelLength+3);
     DWORD dNoOfBytesWritten = 0;     // No of bytes written to the port
 
+//  =========== DEBUG ===========
     printf("%c ", lpBufferRed[0]);
     printf("%c ", lpBufferRed[1]);
     printf("%d ", lpBufferRed[2]);
@@ -398,21 +402,40 @@ inline bool sendPanelText(unsigned int panelIndex, int ledOffsetX, char text[], 
         printf("%02x ", lpBufferRed[i]);
     printf("\n\r");
 
-//    WriteFile(hComm,        // Handle to the Serial port
-//              lpBufferRed,     // Data to be written to the port
-//              sizeof(lpBufferRed),  //No of bytes to write
-//              &dNoOfBytesWritten, //Bytes written
-//              NULL);
+    printf("%c ", lpBufferGreen[0]);
+    printf("%c ", lpBufferGreen[1]);
+    printf("%d ", lpBufferGreen[2]);
+    for(char i=3; i<panelLength*7+4; i++) // NOTE : no sizeof with dynamically allocated arrays
+        printf("%02x ", lpBufferGreen[i]);
+    printf("\n\r");
 
     char TempChar; //Temporary character used for reading
     DWORD NoBytesRead;
+/*
+    WriteFile(hComm,        // Handle to the Serial port
+              lpBufferRed,     // Data to be written to the port
+              sizeof(lpBufferRed),  //No of bytes to write
+              &dNoOfBytesWritten, //Bytes written
+              NULL);
 
-//    ReadFile( hComm,           //Handle of the Serial port
-//              &TempChar,       //Temporary character
-//              sizeof(TempChar),//Size of TempChar
-//              &NoBytesRead,    //Number of bytes read
-//              NULL);
+    ReadFile( hComm,           //Handle of the Serial port
+              &TempChar,       //Temporary character
+              sizeof(TempChar),//Size of TempChar
+              &NoBytesRead,    //Number of bytes read
+              NULL);
 
+    WriteFile(hComm,        // Handle to the Serial port
+              lpBufferGreen,     // Data to be written to the port
+              sizeof(lpBufferGreen),  //No of bytes to write
+              &dNoOfBytesWritten, //Bytes written
+              NULL);
+
+    ReadFile( hComm,           //Handle of the Serial port
+              &TempChar,       //Temporary character
+              sizeof(TempChar),//Size of TempChar
+              &NoBytesRead,    //Number of bytes read
+              NULL);
+*/
     delete []lpBufferGreen;
     delete []lpBufferRed;
 
@@ -729,9 +752,19 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
         PostQuitMessage(0);
         break;
     case WM_TIMER:
-        panelTextOffset = (panelTextOffset+1)%(panelLength*CHAR_WIDTH_LED);
+    {
+        if(panelSendingIndex == PANEL_NONE)
+            break;
+        if(panels[panelSendingIndex].effect == LR || panels[panelSendingIndex].effect == RL)
+        {
+            panelTextOffset = (panelTextOffset+1)%(panelLength*CHAR_WIDTH_LED);
+        }
+        sendPanelText(panelSendingIndex, panelTextOffset, panels[panelSendingIndex].panelText, bankFlipFlop);
+        bankFlipFlop = bankFlipFlop?0:1;
+        changeBank(bankFlipFlop);
         redrawPanels();
         break;
+    }
     case WM_PAINT:
     {
         HDC         hDC;
@@ -961,21 +994,22 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
                     break;
                 case MAIN_SEND1_BUTTON:
                 {
-                    sendPanelText(0, 0, "BABA", 4, 0);
-                    changeBank(0);
+                    panelSendingIndex = 0;
                     break;
                 }
                 case MAIN_SEND2_BUTTON:
                 {
-                    changeBank(1);
+                    panelSendingIndex = 1;
                     break;
                 }
                 case MAIN_SEND3_BUTTON:
                 {
+                    panelSendingIndex = 2;
                     break;
                 }
                 case MAIN_SEND4_BUTTON:
                 {
+                    panelSendingIndex = 3;
                     break;
                 }
                 }
