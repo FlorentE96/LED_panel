@@ -270,36 +270,36 @@ void character2Serial(char characterID, char outputRed[7], char outputGreen[7], 
     CloseHandle(hFile);
     for(int y=0; y<7; y++)
     {
+        outputGreen[y] = 0;
+        outputRed[y] = 0;
         for(int x=0; x<5; x++)
         {
-            outputGreen[y] &= 0xFE;
             if(hasGreen(panel.fg_color))
             {
                 if(hasGreen(panel.bg_color))
                     outputGreen[y] = 1;
                 else
-                    outputGreen[y] |= ((char)myBMP[y][5-x]<<x)&0x01;
+                    outputGreen[y] |= ((char)myBMP[y][4-x]<<x);
             }
             else
             {
                 if(hasGreen(panel.bg_color))
-                    outputGreen[y] |= (~((char)myBMP[y][5-x]<<x))&0x01;
+                    outputGreen[y] |= (~(char)myBMP[y][4-x]&0x01)<<x;
                 else
                     outputGreen[y] = 0;
             }
 
-            outputRed[y] &= 0xFE;
             if(hasRed(panel.fg_color))
             {
                 if(hasRed(panel.bg_color))
                     outputRed[y] = 1;
                 else
-                    outputRed[y] |= ((char)myBMP[y][5-x]<<x);
+                    outputRed[y] |= ((char)myBMP[y][4-x]<<x);
             }
             else
             {
                 if(hasRed(panel.bg_color))
-                    outputRed[y] |= (~((char)myBMP[y][5-x]<<x))&0x01;
+                    outputRed[y] |= (~(char)myBMP[y][4-x]&0x01)<<x;
                 else
                     outputRed[y] = 0;
             }
@@ -332,56 +332,89 @@ bool inline changeBank(int bank)
         return false;
 }
 
-inline bool sendPanel()
+inline bool sendPanelText(unsigned int panelIndex, int ledOffsetX, char text[], int textLength, int bank)
 {
     char red[7] = {0,};
     char green[7] = {0,};
-    character2Serial('A', red, green, panels[1]);
-    char lpBufferRed[11] = {'M','r',7,1,1,1,1,1,1,1,  0};
 
-    for(int i=0; i<7; i++)
+    char *lpBufferRed;
+    lpBufferRed = new char[panelLength*7+4]; // 'M', 'r', length, chksm
+    lpBufferRed[0] = 'M';
+    lpBufferRed[1] = bank?'R':'r';
+    lpBufferRed[2] = textLength*7;
+
+    char *lpBufferGreen;
+    lpBufferGreen = new char[panelLength*7+4]; // 'M', 'r', length, chksm
+    lpBufferGreen[0] = 'M';
+    lpBufferGreen[1] = bank?'G':'g';
+    lpBufferGreen[2] = panelLength*7; // we always send a whole panel
+
+    int j=0;
+    while(text[j] != '\0') // for each character of the text
     {
-        lpBufferRed[i+3] = red[i];
+        character2Serial(text[j], red, green, panels[panelIndex]); // retrieve the serial data of the character
+        for(int i=0; i<7; i++) // for each byte of the character's serial data
+        {
+            lpBufferRed[7*j+i+3] = red[i];
+        }
+        for(int i=0; i<7; i++) // for each byte of the character's serial data
+        {
+            lpBufferGreen[7*j+i+3] = green[i];
+        }
+        j++;
     }
 
-    lpBufferRed[10] = calculateChecksum(lpBufferRed, 10);
+    for (j=j*7+3; j<panelLength*7+3; j++) // for the rest of the length
+    {
+        if(panels[panelIndex].bg_color == clrBlack)
+        {
+            lpBufferRed[j] = 0;
+            lpBufferGreen[j] = 0;
+        }
+        else if(panels[panelIndex].bg_color == clrRed)
+        {
+            lpBufferRed[j] = 0x1F;
+            lpBufferGreen[j] = 0;
+        }
+        else if(panels[panelIndex].bg_color == clrGreen)
+        {
+            lpBufferRed[j] = 0;
+            lpBufferGreen[j] = 0x1F;
+        }
+        else if(panels[panelIndex].bg_color == clrYellow)
+        {
+            lpBufferRed[j] = 0x1F;
+            lpBufferGreen[j] = 0x1F;
+        }
+    }
+
+    lpBufferRed[panelLength*7+3] = calculateChecksum(lpBufferRed, panelLength+3);
     DWORD dNoOfBytesWritten = 0;     // No of bytes written to the port
 
-    WriteFile(hComm,        // Handle to the Serial port
-              lpBufferRed,     // Data to be written to the port
-              sizeof(lpBufferRed),  //No of bytes to write
-              &dNoOfBytesWritten, //Bytes written
-              NULL);
+    printf("%c ", lpBufferRed[0]);
+    printf("%c ", lpBufferRed[1]);
+    printf("%d ", lpBufferRed[2]);
+    for(char i=3; i<panelLength*7+4; i++) // NOTE : no sizeof with dynamically allocated arrays
+        printf("%02x ", lpBufferRed[i]);
+    printf("\n\r");
+
+//    WriteFile(hComm,        // Handle to the Serial port
+//              lpBufferRed,     // Data to be written to the port
+//              sizeof(lpBufferRed),  //No of bytes to write
+//              &dNoOfBytesWritten, //Bytes written
+//              NULL);
 
     char TempChar; //Temporary character used for reading
     DWORD NoBytesRead;
 
-    ReadFile( hComm,           //Handle of the Serial port
-              &TempChar,       //Temporary character
-              sizeof(TempChar),//Size of TempChar
-              &NoBytesRead,    //Number of bytes read
-              NULL);
+//    ReadFile( hComm,           //Handle of the Serial port
+//              &TempChar,       //Temporary character
+//              sizeof(TempChar),//Size of TempChar
+//              &NoBytesRead,    //Number of bytes read
+//              NULL);
 
-    char lpBufferGreen[11] = {'M','g',7,1,1,1,1,1,1,1,  0};
-
-    for(int i=0; i<7; i++)
-    {
-        lpBufferGreen[i+3] = red[i];
-    }
-
-    lpBufferGreen[10] = calculateChecksum(lpBufferGreen, 10);
-
-    WriteFile(hComm,        // Handle to the Serial port
-              lpBufferGreen,     // Data to be written to the port
-              sizeof(lpBufferGreen),  //No of bytes to write
-              &dNoOfBytesWritten, //Bytes written
-              NULL);
-
-    ReadFile( hComm,           //Handle of the Serial port
-              &TempChar,       //Temporary character
-              sizeof(TempChar),//Size of TempChar
-              &NoBytesRead,    //Number of bytes read
-              NULL);
+    delete []lpBufferGreen;
+    delete []lpBufferRed;
 
     return true;
 }
@@ -928,7 +961,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
                     break;
                 case MAIN_SEND1_BUTTON:
                 {
-                    sendPanel();
+                    sendPanelText(0, 0, "BABA", 4, 0);
                     changeBank(0);
                     break;
                 }
