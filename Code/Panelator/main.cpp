@@ -15,7 +15,7 @@ HINSTANCE hInst;
 TCHAR com_port[] = "COMX";
 DCB dcbSerialParams = { 0 }; // Initializing DCB (serial) structure
 HWND hwnd;
-int panelLength = 8;
+int panelLength = 5;
 DWORD dwEventMask;
 char SerialBuffer[255];//Buffer for storing Rxed Data
 COMMTIMEOUTS timeouts;
@@ -23,7 +23,6 @@ char REDbank[2][70];
 char GREENbank[2][70];
 bool characterRED[10][35];
 bool characterGREEN[10][35];
-int i = 0;
 HWND global_hwnd;
 //functions
 BOOL CALLBACK DlgPanelConf(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam);
@@ -32,7 +31,8 @@ void printCharacterOnPanel(HDC hDC, unsigned int panelIndex, int charOffsetX, in
 int openSerial(void);
 void storeRXmsg(int bank, bool LEDcolor, char msgSize);
 void byteToBool(int bank);
-void serialTreat(void);
+void serialTreat(char inputMessage[]);
+void dispUpd(void);
 
 inline char calculateChecksum(char* inString, int length){
     int sum=0;
@@ -49,83 +49,96 @@ char tempChar;
 COMSTAT commstat;
 DWORD dwErrors = 0;
 if(hComm == INVALID_HANDLE_VALUE){
-    printf("serial receive error");
+    printf("Serial receive error\n\r");
     return;
 }
 memset(&commstat, 0, sizeof(commstat));
 ClearCommError(hComm, &dwErrors,  &commstat);
     if (commstat.cbInQue) {
-        ReadFile( hComm, &tempChar, 1, &NBytesRead,NULL);
-        SerialBuffer[i] = tempChar;
-        printf("%s",&SerialBuffer[i]);
-        i++;
-        if (SerialBuffer[i-1] == 13){
-            //if (calculateChecksum(SerialBuffer, i-3) == SerialBuffer[i-2]){
-                //now it should serial TX that the checksum worked
-                char lpBuffer = 0xaa;
-                DWORD dNoOfBytesWritten = 0;    // No of bytes written to the port
+        ReadFile( hComm, SerialBuffer, sizeof(SerialBuffer), &NBytesRead, NULL);
+        printf("Received the following serial data: %s\n\r",&SerialBuffer);
 
+        if (SerialBuffer[0] == 'M'){
+            if (1){//calculateChecksum(SerialBuffer, SerialBuffer[2]+3) == SerialBuffer[SerialBuffer[2]+3]){
+                serialTreat(SerialBuffer);
+                char lpBuffer = 0xAA;
+                DWORD dNoOfBytesWritten = 0;    // No of bytes written to the port
+                printf("Checksum is right, sending 0xAA...\n\r");
                 WriteFile(hComm,                // Handle to the Serial port
-                          (LPCVOID)lpBuffer,             // Data to be written to the port
+                          &lpBuffer,             // Data to be written to the port
                           sizeof(lpBuffer),     // No of bytes to write
                           &dNoOfBytesWritten,   // Bytes written
                           NULL);
-
-                serialTreat();
-//            } else {
-//                //here it should serial TX that the checksum was wrong
-//                char lpBuffer = 0xff;
-//                DWORD dNoOfBytesWritten = 0;    // No of bytes written to the port
-//
-//                WriteFile(hComm,                // Handle to the Serial port
-//                          (LPCVOID)lpBuffer,    // Data to be written to the port
-//                          sizeof(lpBuffer),     //No of bytes to write
-//                          &dNoOfBytesWritten,   //Bytes written
-//                          NULL);
-//            }
+            } else {
+                char lpBuffer = 0xFF;
+                DWORD dNoOfBytesWritten = 0;    // No of bytes written to the port
+                printf("Checksum is wrong, sending 0xFF...\n\r");
+                WriteFile(hComm,                // Handle to the Serial port
+                          &lpBuffer,    // Data to be written to the port
+                          sizeof(lpBuffer),     //No of bytes to write
+                          &dNoOfBytesWritten,   //Bytes written
+                          NULL);
+            }
+        } else if (SerialBuffer[0] == 'B'){
+            if(!SerialBuffer[1]){
+                printf("Called a bank change to B0, sending 0xAA\n\r");
+                byteToBool(0);
+                char lpBuffer = 0xAA;
+                DWORD dNoOfBytesWritten = 0;    // No of bytes written to the port
+                WriteFile(hComm,                // Handle to the Serial port
+                          &lpBuffer,    // Data to be written to the port
+                          sizeof(lpBuffer),     // No of bytes to write
+                          &dNoOfBytesWritten,   // Bytes written
+                          NULL);
+            }
+            else {
+                printf("Called a bank change to B1, sending 0xAA\n\r");
+                byteToBool(1);
+                char lpBuffer = 0xAA;
+                DWORD dNoOfBytesWritten = 0;    // No of bytes written to the port
+                WriteFile(hComm,                // Handle to the Serial port
+                          &lpBuffer,    // Data to be written to the port
+                          sizeof(lpBuffer),     // No of bytes to write
+                          &dNoOfBytesWritten,   // Bytes written
+                          NULL);
+            }
         }
+        else {
+            char lpBuffer = 0xFF;
+                DWORD dNoOfBytesWritten = 0;    // No of bytes written to the port
+                printf("message was not understood, sending 0xFF...\n\r");
+                WriteFile(hComm,                // Handle to the Serial port
+                          &lpBuffer,    // Data to be written to the port
+                          sizeof(lpBuffer),     //No of bytes to write
+                          &dNoOfBytesWritten,   //Bytes written
+                          NULL);
+        }
+    dispUpd();
     }
 }
 
-void dispUpd(void);
-
-void serialTreat(void){
-    printf("\nmensagem totalmente recebida");
-    i = 0;
-    if (SerialBuffer[0]== 'M'){        /*check if is a message*/
-        switch (SerialBuffer[1]){      /*check in which bank it should be stored*/
+void serialTreat(char inputMessage[]){
+    printf("message received...\n\d");
+    if (inputMessage[0]== 'M'){        /*check if is a message*/
+        switch (inputMessage[1]){      /*check in which bank it should be stored*/
             case 'r': /*bank 0, red*/
-                printf("\nmsg stored at R0");
-                storeRXmsg(0, 1, SerialBuffer[2]);
+                printf("msg stored at R0\n\r");
+                storeRXmsg(0, 1, inputMessage[2]);
                 break;
             case 'R': /*bank 1, red*/
-                storeRXmsg(1, 1, SerialBuffer[2]);
-                printf("\nmsg stored at R1");
+                storeRXmsg(1, 1, inputMessage[2]);
+                printf("msg stored at R1\n\r");
                 break;
             case 'g': /*bank 0, green*/
-                storeRXmsg(0, 0, SerialBuffer[2]);
-                printf("\nmsg stored at G0");
+                storeRXmsg(0, 0, inputMessage[2]);
+                printf("msg stored at G0\n\r");
                 break;
             case 'G': /*bank 1, green*/
-                storeRXmsg(1, 0, SerialBuffer[2]);
-                printf("\nmsg stored at G1");
+                storeRXmsg(1, 0, inputMessage[2]);
+                printf("msg stored at G1\n\r");
                 break;
         }
     }
-    if (SerialBuffer[0]=='B'){        /*check if is a bank change*/
-        if(SerialBuffer[1]=='0'){
-            printf("\ncalled b0");
-            byteToBool(0);
-            //convert current bank message to bool array and store it at characterRED and characterGREEN
-        }
-        else{
-            printf("\ncalled b1");
-            byteToBool(1);
-        }
-
-    }
-memset(SerialBuffer, 0, 255);
-dispUpd();
 }
 
 LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
@@ -141,7 +154,6 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
         break;
         case WM_PAINT:
         {
-            printf("\nWM PAINT");
             HDC         hDC;
             PAINTSTRUCT ps;
             RECT        panel1 = { 10, 20+30, panelLength*70+10, 98+20+30 };
@@ -160,7 +172,6 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
         break;
         }
         case WM_COMMAND:{
-            printf("\nWM command");
             if (HIWORD(wParam) == 1 || HIWORD(wParam) == 0){
                 switch(LOWORD(wParam)){
                     case MENU_CLOSE_BN:
@@ -398,14 +409,12 @@ void storeRXmsg(int bank, bool LEDcolor, char msgSize){
     msgSize is a char containing the number of bytes to be read
 */
     if (LEDcolor == 1){
-        for (int t=0;t<msgSize;t++){
+        for (int t = 0; t < (msgSize) ; t++){
             REDbank[bank][t] = SerialBuffer[t+3];
         }
-        printf("\n");
-        printf(REDbank[0]);
     }
     else{
-        for (int t=0;t<msgSize;t++){
+        for (int t = 0 ; t < msgSize ; t++){
             GREENbank[bank][t] = SerialBuffer[t+3];
         }
     }
@@ -415,7 +424,7 @@ int openSerial(void) {
     if(hComm != NULL)
         CloseHandle(hComm);
     hComm = CreateFile(com_port,         // for COM1-COM9 only
-                        GENERIC_READ,    // Read only
+                        GENERIC_READ | GENERIC_WRITE,    // Read AND write
                         0,               // No Sharing
                         NULL,            // No Security
                         OPEN_EXISTING,   // Open existing port only
@@ -449,7 +458,7 @@ int openSerial(void) {
         printf("set timeout failed");
     }
 
-    printf("\nconnected");
+    printf("*** connected ***\n\r");
     return 1;
 }
 
@@ -481,7 +490,6 @@ void printCharacterOnPanel(HDC hDC, unsigned int panelIndex, int charOffsetX, in
         panelY += 14;
         panelX = 10 + charOffsetX*70 + 2;
     }
-printf("\nprinted on disp");
 }
 
 void byteToBool(int bank){
@@ -490,13 +498,13 @@ int pos = 0;
         for (int l = 0; l < 7; l++){
             for (int j = 0; j < 5; j++){
                 characterRED[character][pos + j] = (REDbank[bank][l + character * 7 ] & (1 << j));
-                printf("%d",characterRED[character][pos + j]);
                 characterGREEN[character][pos + j] = (GREENbank[bank][l + character * 7 ] & (1 << j));
             }
         pos = pos + 5;
         }
     pos = 0;
     }
+dispUpd();
 }
 
 void dispUpd(void){
